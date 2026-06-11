@@ -5,6 +5,8 @@
 using Collections.Pooled;
 using LoneEftDmaRadar.Tarkov.Unity.Collections;
 using LoneEftDmaRadar.Tarkov.World.Player;
+using System.Globalization;
+using LoneEftDmaRadar;
 
 namespace LoneEftDmaRadar.Tarkov.World
 {
@@ -46,12 +48,40 @@ namespace LoneEftDmaRadar.Tarkov.World
                 using var playersList = UnityList<ulong>.Create(this, false); // Realtime Read
                 using var registered = playersList.Where(x => x != 0x0).ToPooledSet();
                 /// Allocate New Players
+                bool anyNew = false;
                 foreach (var playerBase in registered)
                 {
                     if (playerBase == LocalPlayer) // Skip LocalPlayer, already allocated
                         continue;
-                    // Add new player
-                    AbstractPlayer.Allocate(_players, playerBase, _game);
+                    // Add new player if missing
+                    if (!_players.ContainsKey(playerBase))
+                    {
+                        AbstractPlayer.Allocate(_players, playerBase, _game);
+                        anyNew = true;
+                        try
+                        {
+                            // If allocated and is an ObservedPlayer, record its spawn position
+                            if (_players.TryGetValue(playerBase, out var p) && p is ObservedPlayer op)
+                            {
+                                var pos = op.Position;
+                                string posStr = string.Format(CultureInfo.InvariantCulture, "{0};{1};{2}", pos.X, pos.Y, pos.Z);
+                                Program.Config.Cache.RaidCache.SpawnPositions[op.Id] = posStr;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                // Trigger auto-grouping only if we allocated new players (spawn/reconnect)
+                if (anyNew)
+                {
+                    try
+                    {
+                        _game.UpdateAutoGroups(allowForming: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.WriteLine($"[RegisteredPlayers] UpdateAutoGroups ERROR: {ex}");
+                    }
                 }
                 /// Update Existing Players incl LocalPlayer
                 UpdateExistingPlayers(registered);

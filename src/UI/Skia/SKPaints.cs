@@ -149,6 +149,23 @@ namespace LoneEftDmaRadar.UI.Skia
             IsAntialias = true,
         };
 
+        public static SKPaint PaintAIPMC { get; } = new()
+        {
+            Color = SKColor.Parse("ff6600"),
+            StrokeWidth = 1.66f,
+            Style = SKPaintStyle.Stroke,
+            IsAntialias = true,
+            StrokeJoin = SKStrokeJoin.Round,
+            StrokeCap = SKStrokeCap.Round
+        };
+
+        public static SKPaint TextAIPMC { get; } = new()
+        {
+            Color = SKColor.Parse("ff6600"),
+            IsStroke = false,
+            IsAntialias = true,
+        };
+
         public static SKPaint PaintBoss { get; } = new()
         {
             Color = SKColors.Fuchsia,

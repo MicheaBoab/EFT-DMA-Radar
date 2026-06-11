@@ -1,34 +1,10 @@
-# Lone EFT DMA Radar 'Lite'
-<img width="512" height="512" alt="image" src="https://github.com/user-attachments/assets/dc52d50b-66dd-4a9d-bbf2-c7d9b8c24aba" />
+# Up To Date Lone's EFT DMA RADAR
 
-## ⚠️ IMPORTANT Read First
-I have since changed Lone EFT DMA Radar to be **READ-ONLY** and **RADAR-ONLY**.
+Trying to keep the project working with new updates, can't promise i update it immediately after updates since i have real life responsabilities  
 
-No feature requests in Issues please (we have a Suggestions channel in Discord). You are welcome to submit PRs, but I do not accept all contributions.
-
-Distribution of this software ***must include the source code*** per the AGPLv3 terms.
-
-This software is **FREE and OPEN SOURCE** under the AGPLv3 License. You do not need to pay for anything, but [supporting/donating](#-discord-user) is highly encouraged!
-
-## 👋 Welcome
-This is the original Lone EFT DMA Radar by Lone, with some key differences from the original version:
-1. **Radar Only/No Memwrites.**
-3. New & Improved ~~WPF~~ Silk.NET/ImGui Interface.
-
-This version is designed to be as safe as possible from any future detections, and gives you the information that you need while allowing you to fully experience the game for yourself.
-
-## 💾 Setup
-- Download the latest version in [Releases](https://github.com/lone-dma/Lone-EFT-DMA-Radar/releases).
-- See our [Setup Guide](https://github.com/lone-dma/Lone-EFT-DMA-Radar/wiki/Radar-Setup-Guide).
-
-## 🟣 Discord User?
-Join our exclusive [Supporter-Only Discord Server](https://discord.lone-dma.org/)! 😄
-
-## 💸 Donations
-If you find this software useful, _please_ consider [donating](https://github.com/lone-dma#-support-the-project) — every little bit helps!
- 
-## 💖 Special Thanks
-- @xx0m, @Mambo-Noob, and Keeegi
-  - For for your partnership and collaboration on EFT Reversing. Thank you!
-- Marazm
-  - For your hard work on maps, and your willingness to contribute them to the open domain. Thank you!
+# How To Run
+ 1.Download visual studio https://visualstudio.microsoft.com/downloads/  
+ 2.Download ZIP file from git  
+ 3.Unzip it  
+ 4.Open .csproj file in visual studio  
+ 5.Build & run it  

@@ -79,12 +79,6 @@ namespace LoneEftDmaRadar
         public AimviewWidgetConfig AimviewWidget { get; set; } = new();
 
         /// <summary>
-        /// Widgets Configuration.
-        /// </summary>
-        [JsonPropertyName("infoWidget")]
-        public InfoWidgetConfig InfoWidget { get; set; } = new();
-
-        /// <summary>
         /// Loot Widget Configuration.
         /// </summary>
         [JsonPropertyName("lootWidget")]
@@ -317,6 +311,13 @@ namespace LoneEftDmaRadar
         public bool ConnectGroups { get; set; } = true;
 
         /// <summary>
+        /// Connects grouped USEC/BEAR AI units via a semi-transparent line.
+        /// Kept separate from human group connector rendering.
+        /// </summary>
+        [JsonPropertyName("connectUsecBearAiGroups")]
+        public bool ConnectUsecBearAiGroups { get; set; } = false;
+
+        /// <summary>
         /// Max game distance to render targets in Aimview,
         /// and to display dynamic aimlines between two players.
         /// </summary>
@@ -385,6 +386,12 @@ namespace LoneEftDmaRadar
         [JsonPropertyName("showWishlist")]
         public bool ShowWishlist { get; set; } = false;
 
+        /// <summary>
+        /// Use PvE mode when querying Tarkov.dev data.
+        /// </summary>
+        [JsonPropertyName("usePvEData")]
+        public bool UsePvEData { get; set; }
+
     }
 
     public sealed class ContainersConfig
@@ -443,15 +450,6 @@ namespace LoneEftDmaRadar
         public bool Enabled { get; set; } = true;
     }
 
-
-    public sealed class InfoWidgetConfig
-    {
-        /// <summary>
-        /// True if the Info Widget is enabled.
-        /// </summary>
-        [JsonPropertyName("enabled")]
-        public bool Enabled { get; set; } = true;
-    }
 
     public sealed class LootWidgetConfig
     {
@@ -574,6 +572,17 @@ namespace LoneEftDmaRadar
         /// </summary>
         [JsonPropertyName("groups")]
         public ConcurrentDictionary<int, int> Groups { get; set; } = new();
+        /// <summary>
+        /// Player spawn positions recorded when players first appear.
+        /// Key: Player Id | Value: "x;y;z" (Invariant culture floats)
+        /// </summary>
+        [JsonPropertyName("spawnPositions")]
+        public ConcurrentDictionary<int, string> SpawnPositions { get; set; } = new();
+        /// <summary>
+        /// If true, groups are locked for this raid and further changes are ignored.
+        /// </summary>
+        [JsonPropertyName("groupsLocked")]
+        public bool GroupsLocked { get; set; } = false;
         /// <summary>
         /// Defines players that have been 'focused' by the user (Right-Click on radar icon).
         /// Key: Player Id | Value: no-op

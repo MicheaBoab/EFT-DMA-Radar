@@ -51,6 +51,12 @@ namespace LoneEftDmaRadar.Tarkov.World.Exits
                 canvas.DrawCircle(point, size, SKPaints.ShapeOutline);
                 canvas.DrawCircle(point, size, paint);
             }
+
+            string transitLabel = string.IsNullOrWhiteSpace(Description) ? "Transit" : Description;
+            var textPoint = point;
+            textPoint.Offset(9.5f, 0);
+            canvas.DrawText(transitLabel, textPoint, SKTextAlign.Left, SKFonts.UIRegular, SKPaints.TextOutline);
+            canvas.DrawText(transitLabel, textPoint, SKTextAlign.Left, SKFonts.UIRegular, paint);
         }
 
         public void DrawMouseover(SKCanvas canvas, EftMapParams mapParams, LocalPlayer localPlayer)

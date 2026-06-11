@@ -12,14 +12,28 @@ namespace LoneEftDmaRadar.Tarkov.World.Player.Helpers
     public sealed class PlayerEquipment
     {
         private const string SECURED_CONTAINER_SLOT = "SecuredContainer";
+        private const string DOGTAG_SLOT = "Dogtag";
         private static readonly FrozenSet<string> _skipSlots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Dogtag", "Compass", "ArmBand", "Eyewear", "Pockets"
+            "Compass", "ArmBand", "Eyewear", "Pockets"
+        }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+        private static readonly FrozenSet<string> _usecDogtagIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "59f32c3b86f77472a31742f0",
+            "6662e9f37fa79a6d83730fa0",
+            "6662ea05f6259762c56f3189",
+        }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+        private static readonly FrozenSet<string> _bearDogtagIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "59f32bb586f774757e1e8442",
+            "6662e9aca7e0b43baa3d5f74",
+            "6662e9cda7e0b43baa3d5f76",
         }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, ulong> _slots = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, TarkovMarketItem> _items = new(StringComparer.OrdinalIgnoreCase);
         private readonly ObservedPlayer _player;
         private bool _inited;
+        private bool _snapshotCaptured;
         private int _cachedValue;
         private ulong _hands;
 
@@ -53,6 +67,37 @@ namespace LoneEftDmaRadar.Tarkov.World.Player.Helpers
         /// </summary>
         public bool CarryingImportantLoot => _items?.Values?.Any(item => item.IsImportant) ?? false;
 
+        /// <summary>
+        /// True when the player's equipment includes a dogtag slot item.
+        /// </summary>
+        public bool HasDogtag => _items?.ContainsKey(DOGTAG_SLOT) ?? false;
+
+        /// <summary>
+        /// Dogtag faction derived from dogtag item metadata when available.
+        /// </summary>
+        [MaybeNull]
+        public string DogtagFaction
+        {
+            get
+            {
+                if (!_items.TryGetValue(DOGTAG_SLOT, out var dogtag) || dogtag is null)
+                    return null;
+
+                if (_usecDogtagIds.Contains(dogtag.BsgId) || ContainsFactionToken(dogtag, "USEC"))
+                    return "Usec";
+
+                if (_bearDogtagIds.Contains(dogtag.BsgId) || ContainsFactionToken(dogtag, "BEAR"))
+                    return "Bear";
+
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// True when initial one-time equipment snapshot has been captured.
+        /// </summary>
+        public bool IsSnapshotCaptured => _inited;
+
         public PlayerEquipment(ObservedPlayer player)
         {
             _player = player;
@@ -83,6 +128,7 @@ namespace LoneEftDmaRadar.Tarkov.World.Player.Helpers
 
                     Refresh(checkInit: false);
                     _inited = true;
+                    _snapshotCaptured = true;
                     return;
                 }
                 catch (Exception ex)
@@ -98,6 +144,9 @@ namespace LoneEftDmaRadar.Tarkov.World.Player.Helpers
 
         public void Refresh(bool checkInit = true)
         {
+            // Equipment is intended to be a one-time initialization snapshot.
+            if (_snapshotCaptured)
+                return;
             GetEquipment(checkInit);
             GetHands();
         }
@@ -182,6 +231,12 @@ namespace LoneEftDmaRadar.Tarkov.World.Player.Helpers
                 _hands = default;
                 Logging.WriteLine($"Error refreshing Player Hands for '{_player.Name}': {ex}");
             }
+        }
+
+        private static bool ContainsFactionToken(TarkovMarketItem item, string token)
+        {
+            return item.Name?.Contains(token, StringComparison.OrdinalIgnoreCase) == true ||
+                item.ShortName?.Contains(token, StringComparison.OrdinalIgnoreCase) == true;
         }
     }
 }

@@ -42,6 +42,11 @@ namespace LoneEftDmaRadar.UI
         private static GRBackendRenderTarget _skBackendRenderTarget = null!;
         private static readonly RateLimiter _purgeRL = new(TimeSpan.FromSeconds(1));
 
+        // Responsiveness monitor
+        private static CancellationTokenSource? _responsivenessCts;
+        private const int ResponsivenessTimeoutMs = 2000; // report if dispatcher doesn't respond within this
+        private const int RenderWarningMs = 250; // log if a single render frame takes longer than this
+
         private static float RadarScale => Config.UI.RadarScale;
 
         private static EftDmaConfig Config { get; } = Program.Config;
@@ -188,6 +193,10 @@ namespace LoneEftDmaRadar.UI
             // Start FPS timer
             _ = RunFpsTimerAsync();
 
+            // Start responsiveness monitor (background task)
+            _responsivenessCts = new CancellationTokenSource();
+            _ = Task.Run(() => ResponsivenessMonitorAsync(_responsivenessCts.Token));
+
             // Ready
             Program.UpdateState(AppState.ProcessNotStarted);
         }
@@ -306,6 +315,7 @@ namespace LoneEftDmaRadar.UI
                 return;
             try
             {
+                var renderStart = Stopwatch.GetTimestamp();
                 // Frame Setup
                 Interlocked.Increment(ref _fpsCounter);
                 _grContext.ResetContext();
@@ -325,6 +335,12 @@ namespace LoneEftDmaRadar.UI
                     AimviewWidget.Render();
                     // UI Render (ImGui)
                     DrawImGuiUI(ref fbSize, delta);
+                }
+                var renderEnd = Stopwatch.GetTimestamp();
+                var renderMs = Stopwatch.GetElapsedTime(renderStart, renderEnd).TotalMilliseconds;
+                if (renderMs > RenderWarningMs)
+                {
+                    Logging.WriteLine($"[Performance] Long render frame: {renderMs:F1}ms");
                 }
             }
             catch (Exception ex)
@@ -479,7 +495,9 @@ namespace LoneEftDmaRadar.UI
             }
 
             // Draw group connectors
-            if (Program.Config.UI.ConnectGroups && allPlayers is not null)
+            bool connectHumanGroups = Program.Config.UI.ConnectGroups;
+            bool connectUsecBearAiGroups = Program.Config.UI.ConnectUsecBearAiGroups;
+            if ((connectHumanGroups || connectUsecBearAiGroups) && allPlayers is not null)
             {
                 DrawGroupConnectors(canvas, allPlayers, map, mapParams);
             }
@@ -487,18 +505,38 @@ namespace LoneEftDmaRadar.UI
             // Draw local player on top
             localPlayer.Draw(canvas, mapParams, localPlayer);
 
-            // Draw mouseover
-            closestToMouse?.DrawMouseover(canvas, mapParams, localPlayer);
+            // Draw mouseover for quest markers only.
+            if (closestToMouse is QuestLocation questLocation)
+            {
+                questLocation.DrawMouseover(canvas, mapParams, localPlayer);
+            }
         }
 
         private static void DrawGroupConnectors(SKCanvas canvas, IEnumerable<AbstractPlayer> allPlayers, IEftMap map, EftMapParams mapParams)
         {
+            bool connectHumanGroups = Program.Config.UI.ConnectGroups;
+            bool connectUsecBearAiGroups = Program.Config.UI.ConnectUsecBearAiGroups;
+
             using var groupedByGrp = new PooledDictionary<int, PooledList<SKPoint>>(capacity: 16);
             try
             {
                 foreach (var player in allPlayers)
                 {
-                    if (player.IsHumanHostileActive && player.GroupId != AbstractPlayer.SoloGroupId)
+                    bool isHumanGroupTarget = connectHumanGroups && player.IsHumanHostileActive;
+
+                    // Include only USEC/BEAR-style AI PMC units and exclude Rogue/Raider-style labels.
+                    bool isUsecBearAiGroupTarget =
+                        connectUsecBearAiGroups &&
+                        player is ObservedPlayer obs &&
+                        obs.IsAI &&
+                        obs.IsHostile &&
+                        obs.IsActive &&
+                        obs.IsAlive &&
+                        obs.IsUsecBearAi &&
+                        (obs.Name.Equals("Usec", StringComparison.OrdinalIgnoreCase) ||
+                         obs.Name.Equals("Bear", StringComparison.OrdinalIgnoreCase));
+
+                    if ((isHumanGroupTarget || isUsecBearAiGroupTarget) && player.GroupId != AbstractPlayer.SoloGroupId)
                     {
                         if (!groupedByGrp.TryGetValue(player.GroupId, out var list))
                         {
@@ -749,12 +787,6 @@ namespace LoneEftDmaRadar.UI
                 AimviewWidget.Draw();
             }
 
-            // Player Info Widget
-            if (PlayerInfoWidget.IsOpen && state == AppState.InRaid)
-            {
-                PlayerInfoWidget.Draw();
-            }
-
             // Loot Widget
             if (LootWidget.IsOpen && state == AppState.InRaid && Config.Loot.Enabled)
             {
@@ -908,6 +940,40 @@ namespace LoneEftDmaRadar.UI
 
             Config.UI.WindowMaximized = _window.WindowState == WindowState.Maximized;
             // CurrentDomain_ProcessExit will execute after this point
+            try
+            {
+                _responsivenessCts?.Cancel();
+                _responsivenessCts?.Dispose();
+                _responsivenessCts = null;
+            }
+            catch { }
+        }
+
+        private static async Task ResponsivenessMonitorAsync(CancellationToken ct)
+        {
+            try
+            {
+                var sw = new Stopwatch();
+                while (!ct.IsCancellationRequested)
+                {
+                    sw.Restart();
+                    // Post a small action to the UI thread and await completion
+                    var t = Dispatcher.InvokeAsync(() => { });
+                    var timeout = Task.Delay(ResponsivenessTimeoutMs, ct);
+                    var completed = await Task.WhenAny(t, timeout);
+                    if (completed == timeout)
+                    {
+                        Logging.WriteLine($"[Responsiveness] Dispatcher did not respond within {ResponsivenessTimeoutMs}ms. Elapsed: {sw.ElapsedMilliseconds}ms");
+                    }
+                    // Sleep a short interval before next check
+                    await Task.Delay(1000, ct);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                Logging.WriteLine($"[Responsiveness] Monitor crashed: {ex}");
+            }
         }
 
         private static void OnMouseDown(IMouse mouse, MouseButton button)
@@ -1293,13 +1359,6 @@ namespace LoneEftDmaRadar.UI
         {
             if (isKeyDown)
                 Config.AimviewWidget.Enabled = !Config.AimviewWidget.Enabled;
-        }
-
-        [Hotkey("Toggle Player Info Widget")]
-        private static void ToggleInfo_HotkeyStateChanged(bool isKeyDown)
-        {
-            if (isKeyDown)
-                Config.InfoWidget.Enabled = !Config.InfoWidget.Enabled;
         }
 
         [Hotkey("Toggle Loot Widget")]

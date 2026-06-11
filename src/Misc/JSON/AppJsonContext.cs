@@ -7,6 +7,7 @@ using LoneEftDmaRadar.Tarkov.World.Player;
 using LoneEftDmaRadar.UI.ColorPicker;
 using LoneEftDmaRadar.UI.Loot;
 using LoneEftDmaRadar.UI.Maps;
+using LoneEftDmaRadar.Web.WebRadar.Data;
 using LoneEftDmaRadar.Web.TarkovDev;
 using VmmSharpEx.Extensions.Input;
 
@@ -33,11 +34,22 @@ namespace LoneEftDmaRadar.Misc.JSON
     [JsonSerializable(typeof(DMAConfig))]
     [JsonSerializable(typeof(UIConfig))]
     [JsonSerializable(typeof(WebRadarConfig))]
+    [JsonSerializable(typeof(WebRadarUpdate))]
+    [JsonSerializable(typeof(WebRadarPlayer))]
+    [JsonSerializable(typeof(WebRadarPlayer[]))]
+    [JsonSerializable(typeof(WebRadarMapInfo))]
+    [JsonSerializable(typeof(WebRadarMapLayer))]
+    [JsonSerializable(typeof(List<WebRadarMapLayer>))]
+    [JsonSerializable(typeof(WebRadarLoot))]
+    [JsonSerializable(typeof(WebRadarLoot[]))]
+    [JsonSerializable(typeof(WebRadarExfil))]
+    [JsonSerializable(typeof(WebRadarExfil[]))]
+    [JsonSerializable(typeof(WebRadarTransit))]
+    [JsonSerializable(typeof(WebRadarTransit[]))]
     [JsonSerializable(typeof(LootConfig))]
     [JsonSerializable(typeof(ContainersConfig))]
     [JsonSerializable(typeof(LootFilterConfig))]
     [JsonSerializable(typeof(AimviewWidgetConfig))]
-    [JsonSerializable(typeof(InfoWidgetConfig))]
     [JsonSerializable(typeof(LootWidgetConfig))]
     [JsonSerializable(typeof(QuestHelperConfig))]
     [JsonSerializable(typeof(PersistentCache))]

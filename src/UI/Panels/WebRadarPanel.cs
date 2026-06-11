@@ -40,6 +40,12 @@ namespace LoneEftDmaRadar.UI.Panels
         /// </summary>
         public static void Draw()
         {
+            _isRunning = WebRadarServer.IsRunning;
+            if (_isRunning && _startButtonText is not "Stopping...")
+                _startButtonText = "Stop";
+            else if (!_isRunning && _startButtonText is not "Starting...")
+                _startButtonText = "Start";
+
             ImGui.SeparatorText("Web Radar Server");
 
             if (!_uiEnabled)
@@ -114,13 +120,10 @@ namespace LoneEftDmaRadar.UI.Panels
             // Start/Stop Button
             if (ImGui.Button(_startButtonText, new Vector2(150, 30)))
             {
-                if (!_isRunning)
-                {
-                    StartServer();
-                }
+                StartServer();
             }
-            if (ImGui.IsItemHovered() && !_isRunning)
-                ImGui.SetTooltip("Start the web radar server");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(_isRunning ? "Stop the web radar server" : "Start the web radar server");
 
             // Server URL
             if (!string.IsNullOrEmpty(_serverUrl))
@@ -143,12 +146,33 @@ namespace LoneEftDmaRadar.UI.Panels
             ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1f), "Instructions:");
             ImGui.BulletText("Configure the server settings above");
             ImGui.BulletText("Click 'Start' to begin the web radar server");
+            ImGui.BulletText("Click 'Stop' to stop the server and release the port");
             ImGui.BulletText("Share the generated URL with teammates");
             ImGui.BulletText("They can view the radar in their web browser");
         }
 
         private static async void StartServer()
         {
+            if (_isRunning)
+            {
+                _startButtonText = "Stopping...";
+                try
+                {
+                    await WebRadarServer.StopAsync();
+                    _isRunning = false;
+                    _uiEnabled = true;
+                    _startButtonText = "Start";
+                    _serverUrl = string.Empty;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(RadarWindow.Handle, $"ERROR Stopping Web Radar Server: {ex.Message}", "Web Radar",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    _startButtonText = "Stop";
+                }
+                return;
+            }
+
             _uiEnabled = false;
             _startButtonText = "Starting...";
 
@@ -156,15 +180,15 @@ namespace LoneEftDmaRadar.UI.Panels
             {
                 ArgumentOutOfRangeException.ThrowIfLessThan(Config.Password.Length, 4, nameof(Config.Password));
                 var tickRate = TimeSpan.FromSeconds(1) / int.Parse(_tickRate);
-                string bindIP = _bindAddress.Trim();
+                string bindIP = "0.0.0.0";
                 int port = int.Parse(_port);
 
                 var externalIP = await WebRadarServer.GetExternalIPAsync();
                 await WebRadarServer.StartAsync(bindIP, port, tickRate, _upnpEnabled);
 
                 _isRunning = true;
-                _startButtonText = "Running...";
-                _serverUrl = $"https://webradar.lone-dma.org?host={externalIP}&port={port}&password={Uri.EscapeDataString(Config.Password)}";
+                _startButtonText = "Stop";
+                _serverUrl = $"http://{externalIP}:{port}/?password={Uri.EscapeDataString(Config.Password)}";
             }
             catch (Exception ex)
             {

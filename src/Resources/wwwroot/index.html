@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebRadar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%2322c55e' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%2322c55e'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <canvas id="radar"></canvas>
+
+  <div id="toolbar" class="collapsed">
+    <button id="toolbar-toggle" type="button" aria-expanded="false" aria-controls="toolbar-content">Radar Tools</button>
+    <div id="toolbar-content">
+      <div class="toolbar-row">
+        <label for="marker-scale-slider">Marker Scale</label>
+        <div class="toolbar-inline">
+          <input type="range" id="marker-scale-slider" min="250" max="350" value="300" step="1" />
+          <span id="marker-scale-value">300%</span>
+        </div>
+      </div>
+      <div class="toolbar-row">
+        <label for="aimline-slider">Aimline</label>
+        <div class="toolbar-inline">
+          <button id="aimline-minus" type="button" class="tool-btn">-</button>
+          <input type="range" id="aimline-slider" min="0" max="10000" value="1500" step="50" />
+          <button id="aimline-plus" type="button" class="tool-btn">+</button>
+        </div>
+        <span id="aimline-value">1500</span>
+      </div>
+      <div class="toolbar-row">
+        <label for="nonhuman-aimline-slider">Non-Human Aimline</label>
+        <div class="toolbar-inline">
+          <button id="nonhuman-aimline-minus" type="button" class="tool-btn">-</button>
+          <input type="range" id="nonhuman-aimline-slider" min="0" max="10000" value="1500" step="50" />
+          <button id="nonhuman-aimline-plus" type="button" class="tool-btn">+</button>
+        </div>
+        <span id="nonhuman-aimline-value">1500</span>
+      </div>
+      <div class="toolbar-row">
+        <label for="reference-player-select">Reference</label>
+        <select id="reference-player-select"></select>
+      </div>
+      <div class="toolbar-row toolbar-check-row">
+        <label for="follow-reference-toggle">Auto Follow Reference</label>
+        <input id="follow-reference-toggle" type="checkbox" />
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
