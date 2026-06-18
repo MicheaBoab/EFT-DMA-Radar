@@ -101,12 +101,13 @@ namespace LoneEftDmaRadar.Web.TarkovDev
 
         private static async Task<HttpResponseMessage> QueryTarkovDevAsync()
         {
+            string gameMode = Program.Config.Loot.UsePvEData ? "pve" : "regular";
             var query = new Dictionary<string, string>
             {
                 { "query",
-                """
+                $$"""
                 {
-                    maps {
+                    maps(gameMode: {{gameMode}}) {
                         name
                         nameId
                         extracts {
@@ -123,7 +124,7 @@ namespace LoneEftDmaRadar.Web.TarkovDev
                             position { x, y, z }
                         }
                     }
-                    items {
+                    items(gameMode: {{gameMode}}) {
                         id
                         name
                         shortName
@@ -143,7 +144,7 @@ namespace LoneEftDmaRadar.Web.TarkovDev
                         normalizedName
                         name
                     }
-                    tasks {
+                    tasks(gameMode: {{gameMode}}) {
                         id
                         name
                         objectives {

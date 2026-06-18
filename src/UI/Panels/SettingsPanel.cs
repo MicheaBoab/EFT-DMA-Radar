@@ -3,6 +3,7 @@
  * Licensed under GNU AGPLv3. See https://www.gnu.org/licenses/agpl-3.0.html
  */
 using ImGuiNET;
+using LoneEftDmaRadar.Misc;
 using LoneEftDmaRadar.Misc.JSON;
 using LoneEftDmaRadar.Tarkov;
 using LoneEftDmaRadar.UI.ColorPicker;
@@ -212,14 +213,6 @@ namespace LoneEftDmaRadar.UI.Panels
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("3D view showing players in your field of view");
 
-                bool infoWidget = Config.InfoWidget.Enabled;
-                if (ImGui.Checkbox("Player Info Widget", ref infoWidget))
-                {
-                    Config.InfoWidget.Enabled = infoWidget;
-                }
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Displays a list of nearby players with details");
-
                 bool lootWidget = Config.LootWidget.Enabled;
                 if (ImGui.Checkbox("Loot Widget", ref lootWidget))
                 {
@@ -280,6 +273,14 @@ namespace LoneEftDmaRadar.UI.Panels
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Draw lines between grouped players");
 
+                bool connectUsecBearAiGroups = Program.Config.UI.ConnectUsecBearAiGroups;
+                if (ImGui.Checkbox("Connect USEC/BEAR AI", ref connectUsecBearAiGroups))
+                {
+                    Program.Config.UI.ConnectUsecBearAiGroups = connectUsecBearAiGroups;
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Draw lines between grouped USEC/BEAR AI units only");
+
                 ImGui.SeparatorText("Misc");
 
                 bool autoGroups = Config.Misc.AutoGroups;
@@ -289,6 +290,38 @@ namespace LoneEftDmaRadar.UI.Panels
                 }
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Best-effort: automatically infer groups before raid start based on proximity");
+
+                // Group Locking
+                bool groupsLocked = Config.Cache.RaidCache?.GroupsLocked ?? false;
+                ImGui.SameLine();
+                if (groupsLocked)
+                {
+                    if (ImGui.Button("Groups Locked")) { }
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Groups are locked for this raid. Click 'Lock/Unlock Groups' below to toggle.");
+                }
+                else
+                {
+                    if (ImGui.Button("Groups Unlocked")) { }
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Groups are unlocked for this raid. Click 'Lock/Unlock Groups' below to toggle.");
+                }
+
+                if (ImGui.Button("Lock/Unlock Groups"))
+                {
+                    try
+                    {
+                        if (Config.Cache.RaidCache is not null)
+                        {
+                            Config.Cache.RaidCache.GroupsLocked = !Config.Cache.RaidCache.GroupsLocked;
+                            // Persist immediately
+                            Config.Save();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.WriteLine($"[SettingsPanel] ERROR toggling GroupsLocked: {ex}");
+                    }
+                }
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Toggle whether group membership is locked for the current raid.");
 
                 ImGui.EndTabItem();
             }
@@ -321,6 +354,16 @@ namespace LoneEftDmaRadar.UI.Panels
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Highlight items from your Tarkov wishlist");
 
+                bool usePvEData = Config.Loot.UsePvEData;
+                if (ImGui.Checkbox("Use PvE Tarkov.dev Data", ref usePvEData))
+                {
+                    Config.Loot.UsePvEData = usePvEData;
+                    Config.Save();
+                    ReloadTarkovDataForGameModeChange();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Switch Tarkov.dev queries between PvP and PvE data, then reload the cached item prices and tasks for the selected mode.");
+
                 if (!lootEnabled)
                 {
                     ImGui.EndDisabled();
@@ -328,6 +371,21 @@ namespace LoneEftDmaRadar.UI.Panels
 
                 ImGui.EndTabItem();
             }
+        }
+
+        private static void ReloadTarkovDataForGameModeChange()
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await TarkovDataManager.ReloadAsync();
+                }
+                catch (Exception ex)
+                {
+                    Logging.WriteLine($"[SettingsPanel] ERROR reloading Tarkov data after mode change: {ex}");
+                }
+            });
         }
 
         private static void DrawContainersTab()

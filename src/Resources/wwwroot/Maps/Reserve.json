@@ -1,0 +1,19 @@
+{
+  "mapID": [ "rezervbase" ],
+  "x": 453.375,
+  "y": 359.775,
+  "scale": 1.456,
+  "rasterScale": 2.00,
+  "mapLayers": [
+    {
+      "minHeight": null,
+      "maxHeight": null,
+      "filename": "Reserve.svg"
+    },
+    {
+      "minHeight": null,
+      "maxHeight": -8,
+      "filename": "Reserve_-1f.svg"
+    }
+  ]
+}

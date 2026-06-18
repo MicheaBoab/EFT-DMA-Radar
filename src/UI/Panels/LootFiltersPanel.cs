@@ -686,15 +686,54 @@ namespace LoneEftDmaRadar.UI.Panels
                 .Values
                 .Where(x => x.Enabled)
                 .SelectMany(x => x.Entries)
-                .Where(e => e.Enabled); // Only enabled entries
+                .Where(e => e.Enabled) // Only enabled entries
+                .Where(e => !string.IsNullOrEmpty(e.ItemID))
+                .ToList();
 
-            foreach (var filter in currentFilters)
+            if (currentFilters.Count > 0)
             {
-                if (string.IsNullOrEmpty(filter.ItemID))
-                    continue;
-                if (TarkovDataManager.AllItems.TryGetValue(filter.ItemID, out var item))
-                    item.SetFilter(filter);
+                // Resolve possible conflicting entries for the same ItemID in a deterministic way.
+                // If any enabled entry for an ItemID is a Blacklist entry, prefer that (blacklist wins).
+                // Otherwise prefer an Important entry. This avoids unpredictable behavior caused by
+                // iteration order when multiple filters contain the same item.
+                var grouped = currentFilters.GroupBy(e => e.ItemID, StringComparer.OrdinalIgnoreCase);
+                foreach (var g in grouped)
+                {
+                    LootFilterEntry? winner = null;
+                    // Prefer blacklist if present
+                    foreach (var entry in g)
+                    {
+                        if (entry.Type == LootFilterEntryType.BlacklistedLoot)
+                        {
+                            winner = entry;
+                            break;
+                        }
+                    }
+                    // Otherwise take first important entry
+                    if (winner is null)
+                        winner = g.FirstOrDefault();
+
+                    if (winner is not null && TarkovDataManager.AllItems.TryGetValue(winner.ItemID, out var item))
+                    {
+                        item.SetFilter(winner);
+                    }
+                }
             }
+            // If multiple entries referenced the same ItemID, log the number of conflicts for diagnostics
+            try
+            {
+                int conflictCount = currentFilters.GroupBy(e => e.ItemID, StringComparer.OrdinalIgnoreCase).Count(g => g.Count() > 1);
+                if (conflictCount > 0)
+                    Logging.WriteLine($"[LootFilters] Detected {conflictCount} item(s) present in multiple enabled filter entries. Resolved deterministically.");
+            }
+            catch { }
+
+            // Immediately refresh the LootManager filter so UI updates reflect the new settings
+            try
+            {
+                Memory.Loot?.RefreshFilter();
+            }
+            catch { }
         }
 
         private static string ColorToHex(Vector3 color)

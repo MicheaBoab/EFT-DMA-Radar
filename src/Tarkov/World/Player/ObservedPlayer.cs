@@ -7,6 +7,7 @@ using LoneEftDmaRadar.Tarkov.Unity.Structures;
 using LoneEftDmaRadar.Tarkov.World.Player.Helpers;
 using LoneEftDmaRadar.Web.TarkovDev;
 using System.Collections.Frozen;
+using System.Text;
 using VmmSharpEx.Scatter;
 
 namespace LoneEftDmaRadar.Tarkov.World.Player
@@ -15,6 +16,10 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
     {
         private readonly GameWorld _gameWorld;
         private readonly RaidCache _raidCache;
+        private bool _isUsecBearAi;
+        private string _usecBearAiFactionName;
+        private DateTime _lastGroupRefresh;
+        private bool _specialAiPostInitFinalized;
         /// <summary>
         /// Player's Unique Id within this Raid Instance [Human Players Only].
         /// </summary>
@@ -27,6 +32,37 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         {
             get => _specialName ?? base.Name;
             protected set => base.Name = value;
+        }
+
+        private void TryRefreshHumanGroupFromView()
+        {
+            try
+            {
+                if (!IsHuman)
+                    return;
+                string grp = ReadGroupString();
+                if (string.IsNullOrEmpty(grp))
+                    return;
+                // Map group string to numeric id - try to reuse existing cache if possible
+                // If the local player's profile parsing stores numeric GroupIds elsewhere, that mapping should be used.
+                // For now, if non-empty group string exists, mark as teammate if it matches local player's group string
+                var local = Memory.LocalPlayer as LocalPlayer;
+                if (local is not null)
+                {
+                    var localGroup = Memory.ReadUnityString(local.Profile + Offsets.PlayerInfo.GroupId);
+                    if (!string.IsNullOrEmpty(localGroup) && localGroup == grp)
+                    {
+                        AssignTeammate(true);
+                        return;
+                    }
+                }
+                // Otherwise, keep as PMC/PScav with SoloGroupId unless cache has mapping
+                if (Config.Cache.RaidCache is RaidCache rc && rc.Groups.TryGetValue(Id, out var gid))
+                {
+                    SetGroupId(gid);
+                }
+            }
+            catch { }
         }
         private PlayerType? _specialType; // Backing field for special roles
         /// <summary>
@@ -78,6 +114,16 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         /// </summary>
         public Enums.ETagStatus HealthStatus { get; private set; } = Enums.ETagStatus.Healthy;
 
+        /// <summary>
+        /// True when this AI was initially identified as USEC/BEAR-type AI voice profile.
+        /// </summary>
+        public bool IsUsecBearAi => _isUsecBearAi;
+
+        /// <summary>
+        /// USEC/BEAR faction display name for AI PMC-like units.
+        /// </summary>
+        public string UsecBearAiFactionName => _usecBearAiFactionName;
+
         internal ObservedPlayer(ulong playerBase, GameWorld gameWorld) : base(playerBase)
         {
             _gameWorld = gameWorld!;
@@ -121,6 +167,8 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
                     {
                         var voicePtr = Memory.ReadPtr(this + Offsets.ObservedPlayerView.Voice);
                         string voice = Memory.ReadUnityString(voicePtr);
+                        _isUsecBearAi = IsUsecBearVoice(voice);
+                        _usecBearAiFactionName = GetUsecBearFactionName(voice);
                         var role = GetInitialAIRole(voice);
                         Name = role.Name;
                         Type = role.Type;
@@ -140,12 +188,99 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
             else
                 throw new NotImplementedException(nameof(PlayerSide));
             Equipment = new PlayerEquipment(this);
-            GroupId = TryGetGroup(Id);
+            // Map native group string to internal group id the same way LocalPlayer/ClientPlayer does
+            try
+            {
+                SetGroupId(GetGroupNumber());
+            }
+            catch { GroupId = TryGetGroup(Id); }
             if (GroupId == TeammateGroupId)
             {
                 Type = PlayerType.Teammate;
             }
             IsFocused = _raidCache is RaidCache rc && rc.Focused.ContainsKey(Id);
+        }
+
+        private string ReadGroupString()
+        {
+            try
+            {
+                var profilePtr = Memory.ReadPtr(this + Offsets.Player.Profile);
+                if (profilePtr == 0) return string.Empty;
+                var infoPtr = Memory.ReadPtr(profilePtr + Offsets.Profile.Info);
+                if (infoPtr == 0) return string.Empty;
+                return Memory.ReadUnityString(infoPtr + Offsets.PlayerInfo.GroupId);
+            }
+            catch { return string.Empty; }
+        }
+
+        private int GetGroupNumber()
+        {
+            try
+            {
+                string grp = ReadGroupString();
+                if (string.IsNullOrEmpty(grp))
+                    return TryGetGroup(Id);
+
+                // If matches local player's group string -> teammate
+                var local = Memory.LocalPlayer as LocalPlayer;
+                if (local is not null)
+                {
+                    try
+                    {
+                        var localGroup = Memory.ReadUnityString(local.Profile + Offsets.PlayerInfo.GroupId);
+                        if (!string.IsNullOrEmpty(localGroup) && localGroup == grp)
+                            return TeammateGroupId;
+                    }
+                    catch { }
+                }
+
+                // Generate a stable positive id from the group string using FNV-1a 32-bit
+                uint hash = 2166136261u;
+                foreach (var b in System.Text.Encoding.UTF8.GetBytes(grp))
+                {
+                    hash ^= b;
+                    hash *= 16777619u;
+                }
+                // Ensure id fits in int and is positive, and not equal to reserved ids
+                int gid = (int)(hash & 0x7FFFFFFF);
+                if (gid == SoloGroupId || gid == TeammateGroupId || gid == 0)
+                {
+                    gid = Math.Max(1, Math.Abs(gid) + 1);
+                }
+
+                // Persist mapping for this player so other code can reapply it
+                try
+                {
+                    if (Config.Cache.RaidCache is RaidCache rc)
+                    {
+                        rc.Groups[Id] = gid;
+                    }
+                }
+                catch { }
+
+                return gid;
+            }
+            catch
+            {
+                return TryGetGroup(Id);
+            }
+        }
+
+        private void SetGroupId(int gid)
+        {
+            GroupId = gid;
+            try
+            {
+                if (Config.Cache.RaidCache is RaidCache rc)
+                {
+                    if (gid == SoloGroupId)
+                        _ = rc.Groups.TryRemove(Id, out _);
+                    else
+                        rc.Groups[Id] = gid;
+                }
+            }
+            catch { }
         }
 
         /// <summary>
@@ -165,6 +300,21 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         /// <param name="groupId"></param>
         public void AssignGroup(int groupId)
         {
+            try
+            {
+                // Prevent changing groups after raid has been locked (>30 seconds after start)
+                if ((_gameWorld is not null && _gameWorld.RaidStartedAt.HasValue &&
+                    DateTime.UtcNow - _gameWorld.RaidStartedAt.Value > TimeSpan.FromSeconds(30)) ||
+                    (Config.Cache.RaidCache?.GroupsLocked == true))
+                {
+                    // If already in requested group, allow (no-op). Otherwise ignore.
+                    if (GroupId == groupId)
+                        return;
+                    Logging.WriteLine($"[ObservedPlayer] AssignGroup ignored for player {Id} - groups locked.");
+                    return;
+                }
+            }
+            catch { }
             GroupId = groupId;
         }
 
@@ -174,6 +324,23 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         /// <param name="isTeammate">True if the Player is a Teammate, otherwise false.</param>
         public void AssignTeammate(bool isTeammate)
         {
+            try
+            {
+                if ((_gameWorld is not null && _gameWorld.RaidStartedAt.HasValue &&
+                    DateTime.UtcNow - _gameWorld.RaidStartedAt.Value > TimeSpan.FromSeconds(30)) ||
+                    (Config.Cache.RaidCache?.GroupsLocked == true))
+                {
+                    // If already in the desired teammate state, allow; otherwise ignore changes.
+                    if (isTeammate && Type == PlayerType.Teammate)
+                        return;
+                    if (!isTeammate && (Type == PlayerType.PMC || Type == PlayerType.PScav))
+                        return;
+                    Logging.WriteLine($"[ObservedPlayer] AssignTeammate ignored for player {Id} - groups locked.");
+                    return;
+                }
+            }
+            catch { }
+
             if (isTeammate)
             {
                 Type = PlayerType.Teammate;
@@ -249,6 +416,44 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
                 UpdateHealthStatus();
             }
             base.OnRegRefresh(scatter, registered, isActive);
+
+            // Periodically attempt to refresh human group information from the observed player's profile view
+            try
+            {
+                // Run every ~1.5 seconds
+                if (_lastGroupRefresh == default || DateTime.UtcNow - _lastGroupRefresh > TimeSpan.FromSeconds(1.5))
+                {
+                    _lastGroupRefresh = DateTime.UtcNow;
+                    TryRefreshHumanGroupFromView();
+                }
+            }
+            catch { }
+
+            TryFinalizeSpecialAiPostInit();
+        }
+
+        private void TryFinalizeSpecialAiPostInit()
+        {
+            if (_specialAiPostInitFinalized || !IsAI)
+                return;
+
+            if (Equipment is null || !Equipment.IsSnapshotCaptured)
+                return;
+
+            try
+            {
+                if (GetSpecialAiRole() is AIRole role)
+                {
+                    AssignSpecialAiRole(role);
+                }
+
+                // Snapshot is immutable after initialization; one pass is sufficient.
+                _specialAiPostInitFinalized = true;
+            }
+            catch
+            {
+                // Keep pending so we can retry on next refresh if anything transient failed.
+            }
         }
 
         /// <summary>
@@ -311,6 +516,94 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
             ["Zombie_Medium"] = new() { Name = "Zombie", Type = PlayerType.AIScav },
         }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
+        private static readonly FrozenSet<string> _shturmanGuardWeapons = new HashSet<string>
+        {
+            "tokarevsvt40762x54rrifle",
+            "svds762x54rsniperrifle",
+            "molotarmsvpo101veperhunter762x51carbine",
+            "sr25",
+            "springfieldarmorym1a762x51rifle",
+            "mosin762x54rboltactionriflesniper",
+            "opsks",
+            "vssvintorez9x39specialsniperrifle",
+            "sr3m9x39compactassaultrifle",
+            "keltecrfb762x51rifle",
+        }.ToFrozenSet();
+
+        private static readonly FrozenSet<string> _shturmanGuardSupportGear = new HashSet<string>
+        {
+            "wilcoxskulllockheadmount",
+            "6b43zabraloshbodyarmoremr",
+            "bntizhukbodyarmoremr",
+            "fortredutmbodyarmor",
+            "6b232bodyarmormountainflora",
+            "6b231armor",
+            "bntikirasanbodyarmor",
+            "anatacticalalphachestrigolivedrab",
+            "dynaforcetritonm43achestharnessblack",
+            "umtbs6sh112scoutsniperchestrigemr",
+            "splavtarzanm22chestrigsmog",
+            "vkboarmybag",
+            "scavbackpack",
+            "wartechberkutbb102backpackatacsfg",
+            "hazard4takedownslingbackpackblack",
+            "hazard4takedownslingbackpackmulticam",
+        }.ToFrozenSet();
+
+        private static readonly FrozenSet<string> _sanitarGuardWeapons = new HashSet<string>
+        {
+            "molotarmsvpo101veperhunter762x51carbine",
+            "saiga12kver1012gasemiautomaticshotgun",
+            "molotarmsvpo136veprkm762x39carbine",
+            "kalashnikovakm762x39assaultrifle",
+            "kalashnikovaks74ub545x39assaultrifle",
+        }.ToFrozenSet();
+
+        private static readonly FrozenSet<string> _sanitarGuardSupportGear = new HashSet<string>
+        {
+            "emercomcap",
+            "kindacowboyhat",
+            "sssh94sferashelmet",
+            "altyn",
+            "bntilshz2dtmhelmet",
+            "highcomstrikerachhciiiahelmet",
+            "aybolitmask",
+            "momexbalaclava",
+            "smokebalaclava",
+            "pestilyplaguemask",
+            "6b43zabraloshbodyarmor",
+            "lbt6094aslickplatecarrier",
+            "fortdefender2bodyarmor",
+            "fortredutmbodyarmor",
+            "bntigzhelkbodyarmor",
+            "nppkiasskorundvmbodyarmor",
+            "bntikirasanbodyarmor",
+            "dynaforcetritonm43achestharness",
+            "wartechtv109tv106chestrig",
+            "splavtarzanm22chestrig",
+            "ssoattack2raidbackpack",
+            "anatacticalbeta2battlebackpack",
+            "lbt2670slimfieldmedpack",
+            "wartechberkutbb102backpack",
+            "dufflebag",
+        }.ToFrozenSet();
+
+        private static readonly FrozenSet<string> _itemVariantTokens = new HashSet<string>
+        {
+            "black",
+            "olive",
+            "drab",
+            "khaki",
+            "tan",
+            "coyote",
+            "multicam",
+            "smog",
+            "atacs",
+            "fg",
+            "flora",
+            "emr",
+        }.ToFrozenSet();
+
         /// <summary>
         /// Get Initial AI Role for this player.
         /// Checks voice line against known roles, otherwise falls back to pattern matching, and other misc. checks.
@@ -325,13 +618,19 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
                 {
                     _ when voiceLine.Contains("scav", StringComparison.OrdinalIgnoreCase) => new() { Name = "Scav", Type = PlayerType.AIScav },
                     _ when voiceLine.Contains("boss", StringComparison.OrdinalIgnoreCase) => new() { Name = "Boss", Type = PlayerType.AIBoss },
-                    _ when voiceLine.Contains("usec", StringComparison.OrdinalIgnoreCase) => new() { Name = "Usec", Type = PlayerType.AIRaider },
-                    _ when voiceLine.Contains("bear", StringComparison.OrdinalIgnoreCase) => new() { Name = "Bear", Type = PlayerType.AIRaider },
+                    _ when voiceLine.Contains("usec", StringComparison.OrdinalIgnoreCase) => GetDefaultUsecBearAiRole(),
+                    _ when voiceLine.Contains("bear", StringComparison.OrdinalIgnoreCase) => GetDefaultUsecBearAiRole(),
                     _ when voiceLine.Contains("black_division", StringComparison.OrdinalIgnoreCase) => new() { Name = "BD", Type = PlayerType.AIRaider },
                     _ when voiceLine.Contains("vsrf", StringComparison.OrdinalIgnoreCase) => new() { Name = "Vsrf", Type = PlayerType.AIRaider },
                     _ when voiceLine.Contains("civilian", StringComparison.OrdinalIgnoreCase) => new() { Name = "Civ", Type = PlayerType.AIScav },
                     _ => new() { Name = "AI", Type = PlayerType.AIScav }
                 };
+            }
+
+            // Known USEC/BEAR AI voices should default to Raider/Rogue until dogtag confirms AIPMC.
+            if (IsUsecBearVoice(voiceLine))
+            {
+                return GetDefaultUsecBearAiRole();
             }
 
             // Labs Raider Check
@@ -340,6 +639,28 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
                 role = new("Raider", PlayerType.AIRaider);
             }
             return role;
+        }
+
+        private AIRole GetDefaultUsecBearAiRole()
+        {
+            return _gameWorld.MapID == "lighthouse"
+                ? new("Rogue", PlayerType.AIRaider)
+                : new("Raider", PlayerType.AIRaider);
+        }
+
+        private static bool IsUsecBearVoice(string voiceLine)
+        {
+            return voiceLine.Contains("usec", StringComparison.OrdinalIgnoreCase)
+                || voiceLine.Contains("bear", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetUsecBearFactionName(string voiceLine)
+        {
+            if (voiceLine.Contains("usec", StringComparison.OrdinalIgnoreCase))
+                return "Usec";
+            if (voiceLine.Contains("bear", StringComparison.OrdinalIgnoreCase))
+                return "Bear";
+            return null;
         }
 
         /// <summary>
@@ -371,6 +692,39 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         {
             if (!IsAI || Equipment?.Items?.Values is not IEnumerable<TarkovMarketItem> items)
                 return null;
+
+            // For AI PMC-like units, use dogtag faction when available and keep voice as fallback.
+            // If no faction can be confirmed, default to Raider/Rogue.
+            if (Equipment.IsSnapshotCaptured)
+            {
+                var dogtagFaction = Equipment.DogtagFaction;
+                if (!string.IsNullOrEmpty(dogtagFaction))
+                {
+                    return new(dogtagFaction, PlayerType.AIRaider);
+                }
+
+                if (Equipment.HasDogtag)
+                {
+                    // Dogtag exists but faction cannot be resolved from dogtag nor voice fallback.
+                    // Classify as generic PMC instead of Rogue/Raider.
+                    if (!_isUsecBearAi || string.IsNullOrEmpty(_usecBearAiFactionName))
+                    {
+                        return new("PMC", PlayerType.PMC);
+                    }
+                }
+
+                if (_isUsecBearAi)
+                {
+                    var factionName = string.IsNullOrEmpty(_usecBearAiFactionName) ? "AIPMC" : _usecBearAiFactionName;
+                    if (!string.Equals(factionName, "AIPMC", StringComparison.OrdinalIgnoreCase) && Equipment.HasDogtag)
+                    {
+                        return new(factionName, PlayerType.AIRaider);
+                    }
+
+                    return GetDefaultUsecBearAiRole();
+                }
+            }
+
             if (items.Any(i => i.BsgId == "61b9e1aaef9a1b5d6a79899a")) // Santa's Bag
             {
                 return new("Santa", PlayerType.AIBoss);

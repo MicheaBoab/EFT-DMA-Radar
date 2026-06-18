@@ -642,7 +642,11 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
                 case PlayerType.AIScav:
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintScav, SKPaints.TextScav);
                 case PlayerType.AIRaider:
-                    return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintRaider, SKPaints.TextRaider);
+                    // AIPMC (Usec/Bear) uses deep orange, Raider/Rogue/Guard uses original orange-yellow
+                    if (this is ObservedPlayer obs && !string.IsNullOrEmpty(obs.UsecBearAiFactionName))
+                        return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintAIPMC, SKPaints.TextAIPMC);
+                    else
+                        return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintRaider, SKPaints.TextRaider);
                 case PlayerType.AIBoss:
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintBoss, SKPaints.TextBoss);
                 case PlayerType.PScav:
@@ -679,18 +683,6 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
             else if (IsAIActive)
             {
                 lines.Add(Name);
-            }
-            if (obs is not null)
-            {
-                // This is outside of the previous conditionals to always show equipment even if they're dead,etc.
-                lines.Add($"Hands: {obs.Equipment.InHands?.ShortName ?? "<Empty>"}");
-                lines.Add($"Value: {Utilities.FormatNumberKM(obs.Equipment.Value)}");
-                foreach (var item in obs.Equipment.Items.OrderBy(e => e.Key))
-                {
-                    string important = item.Value.IsImportant ?
-                        "!!" : null; // Flag important loot
-                    lines.Add($"{important}{item.Key.Substring(0, 5)}: {item.Value.ShortName}");
-                }
             }
 
             Position.ToMapPos(mapParams.Map).ToZoomedPos(mapParams).DrawMouseoverText(canvas, lines.Span);
