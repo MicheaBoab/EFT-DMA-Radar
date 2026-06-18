@@ -347,12 +347,12 @@ namespace LoneEftDmaRadar.UI.Panels
                 }
 
                 bool showWishlist = Config.Loot.ShowWishlist;
-                if (ImGui.Checkbox("Show Wishlist Items", ref showWishlist))
+                if (ImGui.Button(showWishlist ? "Disable Wishlist Items" : "Enable Wishlist Items"))
                 {
-                    Config.Loot.ShowWishlist = showWishlist;
+                    Config.Loot.ShowWishlist = !showWishlist;
                 }
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Highlight items from your Tarkov wishlist");
+                    ImGui.SetTooltip("Toggle wishlist items only. Effective only while loot is enabled.");
 
                 bool usePvEData = Config.Loot.UsePvEData;
                 if (ImGui.Checkbox("Use PvE Tarkov.dev Data", ref usePvEData))

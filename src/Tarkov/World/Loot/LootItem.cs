@@ -103,6 +103,7 @@ namespace LoneEftDmaRadar.Tarkov.World.Loot
         public bool IsBackpack => _item.IsBackpack;
         public bool IsWeapon => _item.IsWeapon;
         public bool IsCurrency => _item.IsCurrency;
+        public string CustomFilterColor => _item.CustomFilter?.Color;
         public bool IsQuestHelperItem => _item.IsQuestHelperItem;
         public bool IsQuestItem { get; init; }
 

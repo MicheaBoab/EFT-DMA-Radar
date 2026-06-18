@@ -1418,6 +1418,13 @@ namespace LoneEftDmaRadar.UI
                 Config.Loot.Enabled = !Config.Loot.Enabled;
         }
 
+        [Hotkey("Toggle Show Wishlist Items")]
+        private static void ToggleShowWishlistItems_HotkeyStateChanged(bool isKeyDown)
+        {
+            if (isKeyDown)
+                Config.Loot.ShowWishlist = !Config.Loot.ShowWishlist;
+        }
+
         [Hotkey("Zoom Out", HotkeyType.OnIntervalElapsed, HK_ZOOMTICKDELAY)]
         private static void ZoomOut_HotkeyDelayElapsed(bool isKeyDown)
         {

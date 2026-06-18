@@ -16,6 +16,7 @@ const svgMetaCache = new Map();
 
 const BASE_MARKER_SCALE = 0.3;
 let markerScaleMultiplier = 1.0;
+let showLootLabels = true;
 let autoFollowReference = false;
 let uiAimLineLength = 1500;
 let uiNonHumanAimLineLength = 1500;
@@ -153,6 +154,12 @@ function getTransits(data) {
   return [];
 }
 
+function getLoot(data) {
+  if (Array.isArray(data?.loot)) return data.loot;
+  if (Array.isArray(data?.Loot)) return data.Loot;
+  return [];
+}
+
 function getMap(data) {
   return data?.map || data?.Map || null;
 }
@@ -190,6 +197,30 @@ function readTransitMapXY(transit) {
   }
   const h = transit?.height ?? transit?.Height ?? transit?.z ?? transit?.Z ?? 0;
   return { x: Number(x), y: Number(y), h: Number.isFinite(Number(h)) ? Number(h) : 0, valid: true };
+}
+
+function readLootMapXY(loot) {
+  const x = loot?.x ?? loot?.X;
+  const y = loot?.y ?? loot?.Y;
+  if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
+    return { x: 0, y: 0, h: 0, valid: false };
+  }
+
+  const h = loot?.height ?? loot?.Height ?? loot?.z ?? loot?.Z ?? 0;
+  return { x: Number(x), y: Number(y), h: Number.isFinite(Number(h)) ? Number(h) : 0, valid: true };
+}
+
+function getLootColor(loot) {
+  const serverColor = String(loot?.colorHex ?? loot?.ColorHex ?? "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(serverColor)) return serverColor;
+  return "#ffd700";
+}
+
+function formatLootLabel(loot) {
+  const name = String(loot?.shortName ?? loot?.ShortName ?? "").trim() || "Loot";
+  const price = Number(loot?.price ?? loot?.Price ?? 0);
+  if (!Number.isFinite(price) || price <= 0) return name;
+  return `[${Math.round(price / 1000)}k] ${name}`;
 }
 
 function getMapLayers(map) {
@@ -864,6 +895,65 @@ function drawExitMarker(pos, localWorldY, color, markerScale) {
   ctx.fill();
 }
 
+function drawLootMarker(pos, localWorldY, color, markerScale) {
+  const radius = 5 * markerScale;
+  const stroke = Math.max(1, 2 * markerScale);
+
+  if (localWorldY == null) {
+    ctx.beginPath();
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = stroke;
+    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  const diff = pos.h - localWorldY;
+  if (diff > 1.45) {
+    drawUpArrow(pos.x, pos.y, color, markerScale);
+    return;
+  }
+  if (diff < -1.45) {
+    drawDownArrow(pos.x, pos.y, color, markerScale);
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = stroke;
+  ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.fillStyle = color;
+  ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawLootLabel(screenX, screenY, text, color, markerScale) {
+  const clean = String(text || "").trim();
+  if (!clean) return;
+
+  const fontSize = Math.max(8, 11 * markerScale);
+  const x = screenX + (7 * markerScale);
+  const y = screenY + (3 * markerScale);
+
+  ctx.save();
+  ctx.font = `600 ${fontSize}px Segoe UI`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+
+  ctx.lineWidth = Math.max(1.5, 2.5 * markerScale);
+  ctx.strokeStyle = "#000000";
+  ctx.fillStyle = color;
+  ctx.strokeText(clean, x, y);
+  ctx.fillText(clean, x, y);
+  ctx.restore();
+}
+
 function drawBackground() {
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, viewportW, viewportH);
@@ -988,6 +1078,7 @@ function drawFrame() {
   const players = getPlayers(data);
   const exfils = getExfils(data);
   const transits = getTransits(data);
+  const lootItems = getLoot(data);
   const serverAimlineSettings = getAimlineSettings(data);
   if (!uiAimLineInitialized) {
     setAimlineUiValue(serverAimlineSettings.aimLineLength);
@@ -1080,6 +1171,22 @@ function drawFrame() {
     drawExitMarker({ x: p.x, y: p.y, h: pos.h }, localWorldY, "#ffa500", markerScale);
   }
 
+  for (const loot of lootItems) {
+    const pos = readLootMapXY(loot);
+    if (!pos.valid) continue;
+
+    const p = toZoomedPos(pos.x, pos.y, params);
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+
+    const color = getLootColor(loot);
+    drawLootMarker({ x: p.x, y: p.y, h: pos.h }, localWorldY, color, markerScale);
+
+    if (showLootLabels) {
+      const label = formatLootLabel(loot);
+      drawLootLabel(p.x, p.y, label, color, markerScale);
+    }
+  }
+
   // Draw dead units first so body markers do not cover active markers.
   for (const drawAlive of [false, true]) {
     for (const player of players) {
@@ -1130,6 +1237,7 @@ function setupToolbar() {
   const nonHumanAimlinePlus = document.getElementById("nonhuman-aimline-plus");
   const referenceSelect = document.getElementById("reference-player-select");
   const followReferenceToggle = document.getElementById("follow-reference-toggle");
+  const lootLabelToggle = document.getElementById("loot-label-toggle");
 
   if (toggle && toolbar) {
     toggle.addEventListener("click", () => {
@@ -1201,8 +1309,16 @@ function setupToolbar() {
   }
 
   if (followReferenceToggle) {
+    followReferenceToggle.checked = autoFollowReference;
     followReferenceToggle.addEventListener("change", () => {
       autoFollowReference = !!followReferenceToggle.checked;
+    });
+  }
+
+  if (lootLabelToggle) {
+    lootLabelToggle.checked = showLootLabels;
+    lootLabelToggle.addEventListener("change", () => {
+      showLootLabels = !!lootLabelToggle.checked;
     });
   }
 }
