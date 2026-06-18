@@ -360,6 +360,9 @@ namespace LoneEftDmaRadar.Web.WebRadar
                                     .ToArray();
 
                                 _latest.Loot = Memory.Loot?.FilteredLoot?
+                                    .Where(x => x.Important)
+                                    .Where(x => !x.IsWishlisted)
+                                    .Where(x => !x.IsQuestItem && !x.IsQuestHelperItem)
                                     .Select(x => WebRadarLoot.Create(x, mapCfg))
                                     .Where(IsValidLoot)
                                     .ToArray();

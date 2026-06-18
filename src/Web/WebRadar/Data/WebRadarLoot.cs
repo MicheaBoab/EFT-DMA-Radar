@@ -21,6 +21,7 @@ namespace LoneEftDmaRadar.Web.WebRadar.Data
         [MemoryPackOrder(6)] public bool IsFood { get; set; }
         [MemoryPackOrder(7)] public bool IsBackpack { get; set; }
         [MemoryPackOrder(8)] public string BsgId { get; set; }
+        [MemoryPackOrder(9)] public string ColorHex { get; set; }
 
         public static WebRadarLoot Create(LootItem loot, EftMapConfig map)
         {
@@ -36,8 +37,22 @@ namespace LoneEftDmaRadar.Web.WebRadar.Data
                 IsMeds = loot.IsMeds,
                 IsFood = loot.IsFood,
                 IsBackpack = loot.IsBackpack,
-                BsgId = loot.ID
+                BsgId = loot.ID,
+                ColorHex = ResolveLootColorHex(loot)
             };
+        }
+
+        private static string ResolveLootColorHex(LootItem loot)
+        {
+            if (!string.IsNullOrWhiteSpace(loot.CustomFilterColor) && SkiaSharp.SKColor.TryParse(loot.CustomFilterColor, out var customColor))
+                return ToCssHex(customColor);
+
+            return ToCssHex(SKPaints.PaintImportantLoot.Color);
+        }
+
+        private static string ToCssHex(SkiaSharp.SKColor color)
+        {
+            return $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
         }
     }
 }
