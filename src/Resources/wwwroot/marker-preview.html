@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marker Vertical Preview</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --up: #4ade80;
+      --down: #f87171;
+      --line: #253047;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(1200px 700px at 20% -10%, #1b2642, var(--bg));
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      min-height: 100%;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 28px auto;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 14px;
+    }
+
+    .card {
+      background: color-mix(in srgb, var(--panel) 92%, black 8%);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .title {
+      margin: 0 0 10px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .row {
+      margin-bottom: 10px;
+    }
+
+    .row label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .row input[type="range"] {
+      width: 100%;
+    }
+
+    .value {
+      font-size: 13px;
+      margin-top: 2px;
+      color: var(--text);
+    }
+
+    .help {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .stage {
+      position: relative;
+      height: 520px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #060b15, #04070f 65%);
+    }
+
+    .grid {
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(0deg, rgba(148,163,184,0.07) 0px, rgba(148,163,184,0.07) 1px, transparent 1px, transparent 52px),
+        repeating-linear-gradient(90deg, rgba(148,163,184,0.05) 0px, rgba(148,163,184,0.05) 1px, transparent 1px, transparent 52px);
+      pointer-events: none;
+    }
+
+    .marker {
+      position: absolute;
+      left: 42%;
+      top: 48%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stack {
+      min-width: 10px;
+      text-align: center;
+      font-weight: 800;
+      line-height: 0.68;
+      font-size: 13px;
+      letter-spacing: 0;
+      text-shadow: 0 0 2px black, 0 0 4px black;
+      user-select: none;
+      white-space: pre;
+      transform: translateX(1px);
+    }
+
+    .icon {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid #0a0a0a;
+      box-sizing: border-box;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.05) inset;
+    }
+
+    .label {
+      font-size: 14px;
+      font-weight: 600;
+      text-shadow: 0 0 2px black, 0 0 4px black;
+    }
+
+    .sub {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .samples {
+      margin-top: 12px;
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 11px;
+      margin-left: 6px;
+    }
+
+    @media (max-width: 850px) {
+      .wrap {
+        grid-template-columns: 1fr;
+      }
+      .stage {
+        height: 430px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1 class="title">Vertical Marker Prototype</h1>
+
+      <div class="row">
+        <label for="heightDiff">Height Diff (m)</label>
+        <input id="heightDiff" type="range" min="-15" max="15" value="0" step="0.1">
+        <div class="value" id="heightDiffValue">0.0 m</div>
+      </div>
+
+      <div class="row">
+        <label for="distance">Distance (m)</label>
+        <input id="distance" type="range" min="1" max="150" value="38" step="1">
+        <div class="value" id="distanceValue">38 m</div>
+      </div>
+
+      <div class="row">
+        <label for="name">Name</label>
+        <input id="name" type="text" value="Enemy A" style="width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:#0d1524;color:var(--text);">
+      </div>
+
+      <div class="help">
+        Layer rule in this prototype:<br>
+        <= 1.5m: no symbol<br>
+        1.5m - 3.5m: 1 symbol<br>
+        3.5m - 6.5m: 2 symbols<br>
+        > 6.5m: 3 symbols (cap)
+      </div>
+
+      <div class="samples">
+        <div>Up sample: <span class="chip" style="color:var(--up)">^</span> <span class="chip" style="color:var(--up)">^^</span> <span class="chip" style="color:var(--up)">^^^</span></div>
+        <div>Down sample: <span class="chip" style="color:var(--down)">v</span> <span class="chip" style="color:var(--down)">vv</span> <span class="chip" style="color:var(--down)">vvv</span></div>
+      </div>
+    </section>
+
+    <section class="card stage">
+      <div class="grid"></div>
+      <div class="marker" id="marker">
+        <div class="stack" id="stack"></div>
+        <div class="icon" id="icon"></div>
+        <div class="label" id="label">
+          Enemy A
+          <span class="sub" id="meta">H: 0.0  D: 38m</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const heightDiff = document.getElementById("heightDiff");
+    const distance = document.getElementById("distance");
+    const nameInput = document.getElementById("name");
+
+    const heightDiffValue = document.getElementById("heightDiffValue");
+    const distanceValue = document.getElementById("distanceValue");
+    const stack = document.getElementById("stack");
+    const icon = document.getElementById("icon");
+    const label = document.getElementById("label");
+    const meta = document.getElementById("meta");
+
+    function getLevelCount(absH) {
+      if (absH <= 1.5) return 0;
+      if (absH <= 3.5) return 1;
+      if (absH <= 6.5) return 2;
+      return 3;
+    }
+
+    function buildStack(ch, count) {
+      if (count <= 0) return "";
+      return Array.from({ length: count }, () => ch).join("\n");
+    }
+
+    function update() {
+      const h = Number(heightDiff.value);
+      const d = Number(distance.value);
+      const n = String(nameInput.value || "Enemy").trim();
+
+      heightDiffValue.textContent = `${h.toFixed(1)} m`;
+      distanceValue.textContent = `${d} m`;
+
+      const levelCount = getLevelCount(Math.abs(h));
+
+      let symbol = "";
+      let color = "#ffd700";
+      if (levelCount > 0 && h > 0) {
+        symbol = buildStack("^", levelCount);
+        color = "#4ade80";
+      } else if (levelCount > 0 && h < 0) {
+        symbol = buildStack("v", levelCount);
+        color = "#f87171";
+      }
+
+      stack.textContent = symbol;
+      stack.style.color = color;
+      icon.style.background = color;
+
+      label.childNodes[0].nodeValue = `${n}\n`;
+      meta.textContent = `H: ${h.toFixed(1)}  D: ${d}m`;
+    }
+
+    [heightDiff, distance, nameInput].forEach(el => el.addEventListener("input", update));
+    update();
+  </script>
+</body>
+</html>

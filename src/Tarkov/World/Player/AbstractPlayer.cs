@@ -43,6 +43,20 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         private const float PP_RADIUS = 3f;
         private const float PP_HALF_HEIGHT = PP_RADIUS * 0.85f;
         private const float PP_NOSE_X = PP_LENGTH / 2f + PP_RADIUS * 0.18f;
+        private static readonly SKPaint _textUp = new()
+        {
+            Color = SKColors.LimeGreen,
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+            StrokeWidth = 2f
+        };
+        private static readonly SKPaint _textDown = new()
+        {
+            Color = SKColors.OrangeRed,
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+            StrokeWidth = 2f
+        };
 
         private static SKPath CreatePlayerPillBase()
         {
@@ -528,6 +542,7 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
                         return;
                     var height = Position.Y - localPlayer.Position.Y;
                     var dist = Vector3.Distance(localPlayer.Position, Position);
+                    DrawVerticalStackIndicator(canvas, point, height);
                     using var lines = new PooledList<string>();
                     var observed = this as ObservedPlayer;
                     string important = (observed is not null && observed.Equipment.CarryingImportantLoot) ?
@@ -624,6 +639,36 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
                 canvas.DrawText(line, point, SKTextAlign.Left, SKFonts.UIRegular, _paints.Item2); // draw line text
 
                 point.Offset(0, SKFonts.UIRegular.Spacing);
+            }
+        }
+
+        private static int GetVerticalLevelCount(float heightDiff)
+        {
+            var absH = MathF.Abs(heightDiff);
+            if (absH <= 1.45f) return 0;
+            if (absH <= 3.8f) return 1;
+            if (absH <= 7.2f) return 2;
+            return 3;
+        }
+
+        private static void DrawVerticalStackIndicator(SKCanvas canvas, SKPoint point, float heightDiff)
+        {
+            int levelCount = GetVerticalLevelCount(heightDiff);
+            if (levelCount <= 0)
+                return;
+
+            bool isUp = heightDiff > 0f;
+            string symbol = isUp ? "^" : "v";
+            var paint = isUp ? _textUp : _textDown;
+            float lineStep = MathF.Max(5f, SKFonts.UIRegular.Spacing * 0.66f);
+            float x = point.X - 11f;
+            float firstY = point.Y - ((levelCount - 1) * lineStep * 0.5f);
+
+            for (int i = 0; i < levelCount; i++)
+            {
+                float y = firstY + (i * lineStep);
+                canvas.DrawText(symbol, x, y, SKTextAlign.Center, SKFonts.UIRegular, SKPaints.TextOutline);
+                canvas.DrawText(symbol, x, y, SKTextAlign.Center, SKFonts.UIRegular, paint);
             }
         }
 
