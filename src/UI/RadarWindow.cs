@@ -278,7 +278,7 @@ namespace LoneEftDmaRadar.UI
         private static IReadOnlyCollection<IExitPoint> Exits => Memory.Exits;
         private static QuestManager Quests => Memory.QuestManager;
         private static bool SearchFilterIsSet => !string.IsNullOrEmpty(LootFilter.SearchString);
-        private static bool LootCorpsesVisible => Config.Loot.Enabled && !Config.Loot.HideCorpses && !SearchFilterIsSet;
+        private static bool LootCorpsesVisible => !Config.Loot.HideCorpses && !SearchFilterIsSet;
         /// <summary>
         /// Currently 'Moused Over' Group.
         /// </summary>
@@ -417,15 +417,25 @@ namespace LoneEftDmaRadar.UI
             // Draw Map
             map.Draw(canvas, localPlayer.Position.Y, mapParams.Bounds, mapCanvasBounds);
 
-            // Draw loot
+            // Draw corpses independently from the global loot visibility toggle.
+            if (LootCorpsesVisible && FilteredLoot is IEnumerable<LootItem> allLoot)
+            {
+                foreach (var item in allLoot.OfType<LootCorpse>())
+                {
+                    item.Draw(canvas, mapParams, localPlayer);
+                }
+            }
+
+            // Draw other loot
             if (Config.Loot.Enabled)
             {
                 if (FilteredLoot is IEnumerable<LootItem> loot)
                 {
-                    foreach (var item in loot)
+                    foreach (var item in loot.Where(x => x is not LootCorpse))
                     {
                         item.Draw(canvas, mapParams, localPlayer);
                     }
+
                 }
 
                 if (Config.Containers.Enabled && Containers is IEnumerable<StaticLootContainer> containers)
@@ -482,7 +492,14 @@ namespace LoneEftDmaRadar.UI
             {
                 foreach (var player in allPlayers)
                 {
-                    if (player == localPlayer)
+                    if (player == localPlayer || player.IsAlive)
+                        continue;
+                    player.Draw(canvas, mapParams, localPlayer);
+                }
+
+                foreach (var player in allPlayers)
+                {
+                    if (player == localPlayer || !player.IsAlive)
                         continue;
                     player.Draw(canvas, mapParams, localPlayer);
                 }
@@ -633,8 +650,14 @@ namespace LoneEftDmaRadar.UI
                 .Where(x => x is not LoneEftDmaRadar.Tarkov.World.Player.LocalPlayer && !x.HasExfild && (!LootCorpsesVisible || x.IsAlive)) ??
                 Enumerable.Empty<AbstractPlayer>();
 
-            var loot = Config.Loot.Enabled ?
-                FilteredLoot ?? Enumerable.Empty<IMouseoverEntity>() : Enumerable.Empty<IMouseoverEntity>();
+            var corpseLoot = LootCorpsesVisible
+                ? (FilteredLoot?.OfType<LootCorpse>().Cast<IMouseoverEntity>() ?? Enumerable.Empty<IMouseoverEntity>())
+                : Enumerable.Empty<IMouseoverEntity>();
+
+            var loot = Config.Loot.Enabled
+                ? (FilteredLoot?.Where(x => x is not LootCorpse).Cast<IMouseoverEntity>() ?? Enumerable.Empty<IMouseoverEntity>())
+                : Enumerable.Empty<IMouseoverEntity>();
+
             var containers = Config.Loot.Enabled && Config.Containers.Enabled ?
                 Containers ?? Enumerable.Empty<IMouseoverEntity>() : Enumerable.Empty<IMouseoverEntity>();
             var exits = Config.UI.ShowExfils ?
@@ -649,7 +672,7 @@ namespace LoneEftDmaRadar.UI
             if (SearchFilterIsSet)
                 players = players.Where(x => x.LootObject is null || !loot.Contains(x.LootObject));
 
-            var result = loot.Concat(containers).Concat(players).Concat(exits).Concat(quests).Concat(hazards);
+            var result = corpseLoot.Concat(loot).Concat(containers).Concat(players).Concat(exits).Concat(quests).Concat(hazards);
 
             using var enumerator = result.GetEnumerator();
             if (!enumerator.MoveNext())
@@ -884,7 +907,7 @@ namespace LoneEftDmaRadar.UI
 
             public void Draw(SKCanvas canvas, EftMapParams mapParams, LocalPlayer localPlayer)
             {
-                if (_entity is LootItem && !Config.Loot.Enabled) // Don't draw ping if loot is disabled
+                if (_entity is LootItem lootItem && lootItem is not LootCorpse && !Config.Loot.Enabled) // Don't draw non-corpse loot ping if loot is disabled
                     return;
                 var now = Stopwatch.GetTimestamp();
                 var elapsedTicks = now - _start;

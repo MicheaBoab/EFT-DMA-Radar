@@ -7,6 +7,7 @@ using LoneEftDmaRadar.Tarkov.World.Exits;
 using LoneEftDmaRadar.Misc.JSON;
 using LoneEftDmaRadar.UI;
 using LoneEftDmaRadar.UI.Maps;
+using LoneEftDmaRadar.UI.Skia;
 using LoneEftDmaRadar.Web.WebRadar.Data;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -342,6 +343,8 @@ namespace LoneEftDmaRadar.Web.WebRadar
                             _latest.MaxDistance = Program.Config.UI.MaxDistance;
                             _latest.TeammateAimlines = Program.Config.UI.TeammateAimlines;
                             _latest.AIAimlines = Program.Config.UI.AIAimlines;
+                            _latest.DeathMarkerColorHex = ToCssHex(SKPaints.PaintDeathMarker.Color);
+                            _latest.CorpseColorHex = ToCssHex(SKPaints.TextCorpse.Color);
 
                             var map = EftMapManager.LoadMap(mapId);
                             _latest.Map = map is not null
@@ -392,6 +395,8 @@ namespace LoneEftDmaRadar.Web.WebRadar
                             _latest.MaxDistance = Program.Config.UI.MaxDistance;
                             _latest.TeammateAimlines = Program.Config.UI.TeammateAimlines;
                             _latest.AIAimlines = Program.Config.UI.AIAimlines;
+                            _latest.DeathMarkerColorHex = ToCssHex(SKPaints.PaintDeathMarker.Color);
+                            _latest.CorpseColorHex = ToCssHex(SKPaints.TextCorpse.Color);
                             _latest.Map = null;
                             _latest.Players = null;
                             _latest.Loot = null;
@@ -618,6 +623,11 @@ namespace LoneEftDmaRadar.Web.WebRadar
                 && IsFinite(player.Rotation.Y)
                 && IsFinite(player.Yaw);
         }
+
+            private static string ToCssHex(SkiaSharp.SKColor color)
+            {
+                return $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
+            }
 
         private static bool IsValidLoot(WebRadarLoot loot)
         {

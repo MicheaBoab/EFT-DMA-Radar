@@ -89,6 +89,18 @@ namespace LoneEftDmaRadar.Web.WebRadar.Data
         /// </summary>
         [MemoryPackOrder(14)]
         public bool AIAimlines { get; set; } = true;
+
+        /// <summary>
+        /// Death marker color resolved from desktop radar paint.
+        /// </summary>
+        [MemoryPackOrder(15)]
+        public string DeathMarkerColorHex { get; set; } = "#000000";
+
+        /// <summary>
+        /// Corpse label/color resolved from desktop radar paint.
+        /// </summary>
+        [MemoryPackOrder(16)]
+        public string CorpseColorHex { get; set; } = "#C0C0C0";
     }
 }
 

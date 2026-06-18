@@ -105,6 +105,24 @@ namespace LoneEftDmaRadar.Web.WebRadar.Data
         public float HeightY { get; set; }
 
         /// <summary>
+        /// True when unit is raider/rogue/guard category.
+        /// </summary>
+        [MemoryPackOrder(17)]
+        public bool IsRaider { get; set; }
+
+        /// <summary>
+        /// True when AIRaider actually maps to AI PMC (Usec/Bear AI).
+        /// </summary>
+        [MemoryPackOrder(18)]
+        public bool IsAIPmc { get; set; }
+
+        /// <summary>
+        /// Final player color resolved from desktop radar paint logic.
+        /// </summary>
+        [MemoryPackOrder(19)]
+        public string ColorHex { get; set; }
+
+        /// <summary>
         /// Create a WebRadarPlayer from a Full Player Object.
         /// </summary>
         /// <param name="player">Full EFT Player Object.</param>
@@ -134,8 +152,39 @@ namespace LoneEftDmaRadar.Web.WebRadar.Data
                 MapX = 0,
                 MapY = 0,
                 IsBoss = player.Type == PlayerType.AIBoss,
-                HeightY = player.Position.Y
+                HeightY = player.Position.Y,
+                IsRaider = player.Type == PlayerType.AIRaider,
+                IsAIPmc = player is ObservedPlayer obs
+                    && player.Type == PlayerType.AIRaider
+                    && !string.IsNullOrEmpty(obs.UsecBearAiFactionName),
+                ColorHex = GetPlayerColorHex(player)
             };
+        }
+
+        private static string GetPlayerColorHex(AbstractPlayer player)
+        {
+            if (player.IsFocused)
+                return ToCssHex(SKPaints.PaintFocused.Color);
+            if (player is LocalPlayer)
+                return ToCssHex(SKPaints.PaintLocalPlayer.Color);
+
+            return player.Type switch
+            {
+                PlayerType.Teammate => ToCssHex(SKPaints.PaintTeammate.Color),
+                PlayerType.PMC => ToCssHex(SKPaints.PaintPMC.Color),
+                PlayerType.AIScav => ToCssHex(SKPaints.PaintScav.Color),
+                PlayerType.AIRaider => player is ObservedPlayer obs && !string.IsNullOrEmpty(obs.UsecBearAiFactionName)
+                    ? ToCssHex(SKPaints.PaintAIPMC.Color)
+                    : ToCssHex(SKPaints.PaintRaider.Color),
+                PlayerType.AIBoss => ToCssHex(SKPaints.PaintBoss.Color),
+                PlayerType.PScav => ToCssHex(SKPaints.PaintPScav.Color),
+                _ => ToCssHex(SKPaints.PaintPMC.Color)
+            };
+        }
+
+        private static string ToCssHex(SkiaSharp.SKColor color)
+        {
+            return $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
         }
 
         /// <summary>

@@ -376,10 +376,10 @@ namespace LoneEftDmaRadar.Tarkov.World
                     // Record when the raid was detected as started
                     RaidStartedAt = DateTime.UtcNow;
                 }
-                if (!RaidStarted && !localPlayer.IsScav)
+                if (!RaidStarted)
                 {
                     RefreshSpecialAi(ct);
-                    if (Config.Misc.AutoGroups)
+                    if (!localPlayer.IsScav && Config.Misc.AutoGroups)
                     {
                         RefreshGroups(localPlayer, ct);
                     }
@@ -403,14 +403,21 @@ namespace LoneEftDmaRadar.Tarkov.World
         {
             ct.ThrowIfCancellationRequested();
 
-            const float guardDistanceThreshold = 15f;
+            const float guardDistanceThreshold = 25f;
 
             var aiPlayers = _rgtPlayers.Where(p => p.IsAI && p.Position.IsNormal())
                 .OfType<ObservedPlayer>()
                 .ToList();
 
+            var inferredRoles = new Dictionary<ObservedPlayer, AIRole?>(aiPlayers.Count);
+            foreach (var ai in aiPlayers)
+            {
+                ct.ThrowIfCancellationRequested();
+                inferredRoles[ai] = ai.GetSpecialAiRole();
+            }
+
             var bossPositions = aiPlayers
-                .Where(p => p.Type == PlayerType.AIBoss)
+                .Where(p => p.Type == PlayerType.AIBoss || (inferredRoles[p] is AIRole role && role.Type == PlayerType.AIBoss))
                 .Select(p => p.Position)
                 .ToList();
 
@@ -418,12 +425,30 @@ namespace LoneEftDmaRadar.Tarkov.World
             foreach (var ai in aiPlayers)
             {
                 ct.ThrowIfCancellationRequested();
-                if (ai.GetSpecialAiRole() is AIRole specialRole) // Santa, etc.
+                if (inferredRoles[ai] is AIRole specialRole) // Santa, etc.
                 {
                     ai.AssignSpecialAiRole(specialRole);
                 }
-                else if (ai.Type == PlayerType.AIScav || ai.Name == "Guard") // Guards
+                else
                 {
+                    if (ai.Type == PlayerType.AIBoss)
+                    {
+                        ai.AssignSpecialAiRole(null);
+                        continue;
+                    }
+
+                    bool isGuardCandidate =
+                        ai.Type == PlayerType.AIScav ||
+                        ai.Type == PlayerType.AIRaider ||
+                        ai.Name == "Guard" ||
+                        ai.Name == "Raider" ||
+                        ai.Name == "Rogue";
+
+                    if (!isGuardCandidate)
+                    {
+                        continue;
+                    }
+
                     bool isGuard = false;
                     foreach (var bossPos in bossPositions)
                     {

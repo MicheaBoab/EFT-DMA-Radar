@@ -386,14 +386,35 @@ function getMapRawSize(visibleLayers, renderedLayers) {
 }
 
 function getPlayerColor(player) {
+  const serverColor = String(player?.colorHex ?? player?.ColorHex ?? "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(serverColor)) return serverColor;
+
   if (player?.isLocal || player?.IsLocal) return "#008000";
   if (player?.isFriendly || player?.IsFriendly) return "#32cd32";
   if (player?.isAlive === false || player?.IsAlive === false) return "#000000";
+
   if (player?.isBoss || player?.IsBoss) return "#ff00ff";
+
+  if (player?.isAIPmc || player?.IsAIPmc) return "#ff6600";
+  if (player?.isRaider || player?.IsRaider) return "#ffc70f";
+
   const typeName = String(player?.typeName ?? player?.TypeName ?? "");
   if (typeName === "Player") return "#ff0000";
   if (typeName === "PlayerScav") return "#ffffff";
+
   return "#ffff00";
+}
+
+function getDeathMarkerColor(data) {
+  const serverColor = String(data?.deathMarkerColorHex ?? data?.DeathMarkerColorHex ?? "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(serverColor)) return serverColor;
+  return "#000000";
+}
+
+function getCorpseLabelColor(data) {
+  const serverColor = String(data?.corpseColorHex ?? data?.CorpseColorHex ?? "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(serverColor)) return serverColor;
+  return "#c0c0c0";
 }
 
 function getPlayerName(player) {
@@ -625,6 +646,10 @@ function readPlayerWorldPos(player) {
   return { x: Number(x), y: Number(y), z: Number(z) };
 }
 
+function isPlayerAlive(player) {
+  return !((player?.isAlive === false) || (player?.IsAlive === false));
+}
+
 function getRelativeStats(player, referencePlayer) {
   if (!player || !referencePlayer) return null;
 
@@ -743,11 +768,11 @@ function getPlayerAimlineLength(player, localPlayer, settings) {
   return aimlineLength;
 }
 
-function drawDeathMarker(screenX, screenY, markerScale) {
+function drawDeathMarker(screenX, screenY, markerScale, color) {
   const len = 6 * markerScale;
   ctx.save();
   ctx.translate(screenX, screenY);
-  ctx.strokeStyle = "#000000";
+  ctx.strokeStyle = color;
   ctx.lineWidth = Math.max(1, 3 * markerScale);
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -978,6 +1003,8 @@ function drawFrame() {
   const localPos = local ? readPlayerMapXY(local) : null;
   const localWorldY = local ? readWorldY(local) : null;
   const markerScale = BASE_MARKER_SCALE * markerScaleMultiplier;
+  const deathMarkerColor = getDeathMarkerColor(data);
+  const corpseLabelColor = getCorpseLabelColor(data);
   syncReferenceSelect(players);
 
   if (autoFollowReference) {
@@ -1053,31 +1080,37 @@ function drawFrame() {
     drawExitMarker({ x: p.x, y: p.y, h: pos.h }, localWorldY, "#ffa500", markerScale);
   }
 
-  for (const player of players) {
-    const pos = readPlayerMapXY(player);
-    if (!pos.valid) continue;
+  // Draw dead units first so body markers do not cover active markers.
+  for (const drawAlive of [false, true]) {
+    for (const player of players) {
+      const alive = isPlayerAlive(player);
+      if (alive !== drawAlive) continue;
 
-    const p = toZoomedPos(pos.x, pos.y, params);
-    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      const pos = readPlayerMapXY(player);
+      if (!pos.valid) continue;
 
-    const alive = !((player?.isAlive === false) || (player?.IsAlive === false));
-    const color = getPlayerColor(player);
-    const name = getPlayerName(player);
-    const relativeRef = selectedReferencePlayer || local;
-    const relative = getRelativeStats(player, relativeRef);
-    const labelLines = relative
-      ? [name, `H: ${relative.height.toFixed(1)} D: ${relative.distance}`]
-      : [name];
-    if (!alive) {
-      drawDeathMarker(p.x, p.y, markerScale);
+      const p = toZoomedPos(pos.x, pos.y, params);
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+
+      const color = getPlayerColor(player);
+      const name = getPlayerName(player);
+      const relativeRef = selectedReferencePlayer || local;
+      const relative = getRelativeStats(player, relativeRef);
+      const labelLines = relative
+        ? [name, `H: ${relative.height.toFixed(1)} D: ${relative.distance}`]
+        : [name];
+
+      if (!alive) {
+        drawDeathMarker(p.x, p.y, markerScale, deathMarkerColor);
+        drawPlayerLabel(p.x, p.y, labelLines, corpseLabelColor, markerScale);
+        continue;
+      }
+
+      const yaw = player?.yaw ?? player?.Yaw ?? player?.rotation?.x ?? player?.rotation?.X ?? 0;
+      const aimlineLength = getPlayerAimlineLength(player, local, aimlineSettings);
+      drawPlayerPill(p.x, p.y, yaw, color, aimlineLength, markerScale);
       drawPlayerLabel(p.x, p.y, labelLines, color, markerScale);
-      continue;
     }
-
-    const yaw = player?.yaw ?? player?.Yaw ?? player?.rotation?.x ?? player?.rotation?.X ?? 0;
-    const aimlineLength = getPlayerAimlineLength(player, local, aimlineSettings);
-    drawPlayerPill(p.x, p.y, yaw, color, aimlineLength, markerScale);
-    drawPlayerLabel(p.x, p.y, labelLines, color, markerScale);
   }
 
   if (!players.length) {
