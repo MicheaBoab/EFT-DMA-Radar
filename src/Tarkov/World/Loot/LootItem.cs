@@ -211,6 +211,12 @@ namespace LoneEftDmaRadar.Tarkov.World.Loot
         {
             if (Program.Config.QuestHelper.Enabled && IsQuestHelperItem)
                 return new(SKPaints.PaintQuestItem, SKPaints.TextQuestItem);
+            string filterColor = _item.CustomFilter?.Color;
+            if (!string.IsNullOrEmpty(filterColor))
+            {
+                var filterPaints = GetFilterPaints(filterColor);
+                return new(filterPaints.Item1, filterPaints.Item2);
+            }
             if (Config.Loot.ShowWishlist && IsWishlisted)
                 return new(SKPaints.PaintWishlistItem, SKPaints.TextWishlistItem);
             if (LootFilter.ShowBackpacks && IsBackpack)
@@ -221,13 +227,6 @@ namespace LoneEftDmaRadar.Tarkov.World.Loot
                 return new(SKPaints.PaintFood, SKPaints.TextFood);
             if (LootFilter.ShowQuestItems && IsQuestItem)
                 return new(SKPaints.PaintQuestItem, SKPaints.TextQuestItem);
-            string filterColor = _item.CustomFilter?.Color;
-
-            if (!string.IsNullOrEmpty(filterColor))
-            {
-                var filterPaints = GetFilterPaints(filterColor);
-                return new(filterPaints.Item1, filterPaints.Item2);
-            }
             if (IsValuableLoot)
                 return new(SKPaints.PaintImportantLoot, SKPaints.TextImportantLoot);
             return new(SKPaints.PaintLoot, SKPaints.TextLoot);

@@ -2,9 +2,10 @@ namespace SDK
 {
     public readonly partial struct Offsets
     {
-        public readonly partial struct GameWorld        // ETF.GameWorld
+        public readonly partial struct GameWorld        // EFT.GameWorld
         {
             public const uint BtrController = 0x28;
+            public const uint ExfiltrationController = 0x68;
             public const uint LocationId = 0xE8;
             public const uint LootList = 0x1B0;
             public const uint RegisteredPlayers = 0x1D0;
@@ -13,12 +14,12 @@ namespace SDK
             public const uint Grenades = 0x2B0;
         }
 
-        public readonly partial struct SynchronizableObject     // ETF.SynchronizableObjects.SynchronizableObject
+        public readonly partial struct SynchronizableObject     // EFT.SynchronizableObjects.SynchronizableObject
         {
             public const uint Type = 0x68;
         }
 
-        public readonly partial struct SynchronizableObjectLogicProcessor       // ETF.SynchronizableObjects.SynchronizableObjectLogicProcessor
+        public readonly partial struct SynchronizableObjectLogicProcessor       // EFT.SynchronizableObjects.SynchronizableObjectLogicProcessor
         {
             public const uint _staticSynchronizableObjects = 0x18;
         }

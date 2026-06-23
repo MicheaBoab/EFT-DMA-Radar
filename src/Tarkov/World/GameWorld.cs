@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using LoneEftDmaRadar.Misc.Workers;
 using LoneEftDmaRadar.Tarkov.IL2CPP;
+using LoneEftDmaRadar.Tarkov.Unity.Collections;
 using LoneEftDmaRadar.Tarkov.Unity.Structures;
 using LoneEftDmaRadar.Tarkov.World.Exits;
 using LoneEftDmaRadar.Tarkov.World.Explosives;
@@ -43,6 +44,7 @@ namespace LoneEftDmaRadar.Tarkov.World
         private readonly WorkerThread _t1;
         private readonly WorkerThread _t2;
         private readonly WorkerThread _t3;
+        private readonly ulong _exfiltrationController;
 
         /// <summary>
         /// Map ID of Current Map.
@@ -105,6 +107,9 @@ namespace LoneEftDmaRadar.Tarkov.World
                 _explosivesManager = new(gameWorld);
                 Hazards = GetHazards(MapID);
                 Exits = GetExits(MapID, _rgtPlayers.LocalPlayer.IsPmc);
+                InitializeExitsWithRuntimeSupport(); // Enable runtime exfil status support
+                _exfiltrationController = Memory.ReadPtr(gameWorld + Offsets.GameWorld.ExfiltrationController, false);
+                DumpExfiltrationControllerSnapshot();
                 // Ensure Cache
                 Config.Cache.RaidCache ??= new();
                 if (Config.Cache.RaidCache.GameWorld != gameWorld)
@@ -164,6 +169,403 @@ namespace LoneEftDmaRadar.Tarkov.World
         }
 
         /// <summary>
+        /// Initialize Exits with runtime exfil support.
+        /// Called from constructor to set GameWorld reference on Exfil objects.
+        /// </summary>
+        private void InitializeExitsWithRuntimeSupport()
+        {
+            try
+            {
+                if (Exits is List<IExitPoint> exitList)
+                {
+                    foreach (var exit in exitList)
+                    {
+                        if (exit is Exfil exfil)
+                        {
+                            exfil.SetGameWorld(this);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logging.WriteLine($"[GameWorld] Error initializing runtime exfil support: {ex}");
+            }
+        }
+
+        private void DumpExfiltrationControllerSnapshot()
+        {
+            try
+            {
+                var dumpPath = Path.Combine(Program.ConfigPath.FullName, "exfiltration-controller-snapshot.txt");
+                Directory.CreateDirectory(Program.ConfigPath.FullName);
+
+                ulong exfilPoints = default;
+                ulong scavExfilPoints = default;
+                ulong secretExfilPoints = default;
+                ulong bannedPlayers = default;
+
+                if (_exfiltrationController != 0)
+                {
+                    exfilPoints = Memory.ReadPtr(_exfiltrationController + 0x20, false);
+                    scavExfilPoints = Memory.ReadPtr(_exfiltrationController + 0x28, false);
+                    secretExfilPoints = Memory.ReadPtr(_exfiltrationController + 0x30, false);
+                    bannedPlayers = Memory.ReadPtr(_exfiltrationController + 0x38, false);
+                }
+
+                var dump = new StringBuilder()
+                    .AppendLine($"[{DateTime.UtcNow:O}] ExfiltrationController snapshot")
+                    .AppendLine($"GameWorld: 0x{Base:X}")
+                    .AppendLine($"ExfiltrationController: 0x{_exfiltrationController:X}")
+                    .AppendLine($"ExfiltrationPoints: 0x{exfilPoints:X}")
+                    .AppendLine($"ScavExfiltrationPoints: 0x{scavExfilPoints:X}")
+                    .AppendLine($"SecretExfiltrationPoints: 0x{secretExfilPoints:X}")
+                    .AppendLine($"BannedPlayers: 0x{bannedPlayers:X}")
+                    .AppendLine();
+
+                AppendExfilPointCollection(dump, "ExfiltrationPoints", exfilPoints, false);
+                AppendExfilPointCollection(dump, "ScavExfiltrationPoints", scavExfilPoints, false);
+                AppendExfilPointCollection(dump, "SecretExfiltrationPoints", secretExfilPoints, true);
+                AppendSimplePointerCollection(dump, "BannedPlayers", bannedPlayers);
+
+                File.AppendAllText(dumpPath, dump.ToString());
+                Logging.WriteLine($"[GameWorld] Wrote exfiltration controller snapshot -> {dumpPath}");
+            }
+            catch (Exception ex)
+            {
+                Logging.WriteLine($"[GameWorld] Failed to dump exfiltration controller snapshot: {ex}");
+            }
+        }
+
+        private static void AppendSimplePointerCollection(StringBuilder dump, string title, ulong collectionPtr)
+        {
+            dump.AppendLine($"[{title}]");
+            if (collectionPtr == 0)
+            {
+                dump.AppendLine("  <null>");
+                dump.AppendLine();
+                return;
+            }
+
+            try
+            {
+                dump.AppendLine($"  Type: {SafeReadObjectType(collectionPtr)}");
+                DumpObjectProbe(dump, collectionPtr, probeCount: 4);
+
+                try
+                {
+                    using var list = UnityList<ulong>.Create(collectionPtr, false);
+                    dump.AppendLine($"  Count: {list.Count}");
+                    int index = 0;
+                    foreach (var entry in list.Take(8))
+                    {
+                        dump.AppendLine($"  [{index++}] 0x{entry:X}");
+                    }
+
+                    if (list.Count > 8)
+                    {
+                        dump.AppendLine($"  ... {list.Count - 8} more");
+                    }
+                }
+                catch
+                {
+                    dump.AppendLine("  <not a UnityList layout; only probe data shown>");
+                }
+            }
+            catch (Exception ex)
+            {
+                dump.AppendLine($"  <read failed: {ex.Message}>");
+            }
+
+            dump.AppendLine();
+        }
+
+        private static void AppendExfilPointCollection(StringBuilder dump, string title, ulong collectionPtr, bool secretPoints)
+        {
+            dump.AppendLine($"[{title}]");
+            if (collectionPtr == 0)
+            {
+                dump.AppendLine("  <null>");
+                dump.AppendLine();
+                return;
+            }
+
+            try
+            {
+                dump.AppendLine($"  Type: {SafeReadObjectType(collectionPtr)}");
+                DumpObjectProbe(dump, collectionPtr, probeCount: 8);
+
+                try
+                {
+                    using var array = UnityArray<ulong>.Create(collectionPtr, false);
+                    dump.AppendLine($"  Count: {array.Count}");
+                    int index = 0;
+                    foreach (var pointPtr in array.Take(8))
+                    {
+                        dump.AppendLine($"  [{index}] {DescribeExfilPoint(pointPtr, secretPoints)}");
+                        index++;
+                    }
+
+                    if (array.Count > 8)
+                    {
+                        dump.AppendLine($"  ... {array.Count - 8} more");
+                    }
+                }
+                catch
+                {
+                    dump.AppendLine("  <not a UnityArray layout; only probe data shown>");
+                }
+            }
+            catch (Exception ex)
+            {
+                dump.AppendLine($"  <read failed: {ex.Message}>");
+            }
+
+            dump.AppendLine();
+        }
+
+        private static string DescribeExfilPoint(ulong pointPtr, bool secretPoints)
+        {
+            if (pointPtr == 0)
+            {
+                return "0x0 <null>";
+            }
+
+            try
+            {
+                var className = ObjectClass.ReadName(pointPtr, 128, false);
+                var statusValue = Memory.ReadValue<byte>(pointPtr + 0x58, false);
+                var statusName = DescribeExfilStatus(statusValue);
+                var reusable = TryReadBool(pointPtr + 0xC8, out var reusableValue)
+                    ? reusableValue.ToString()
+                    : "?";
+                var exfilName = ResolveExfilPointName(pointPtr);
+                var pointId = ResolveUnityStringField(pointPtr + 0x20);
+
+                string settingsId = "?";
+                string settingsName = "?";
+                string settingsType = "?";
+                string eventAvailable = "?";
+                if (TryReadPtr(pointPtr + 0x98, out var settingsPtr) && settingsPtr != 0)
+                {
+                    settingsId = ResolveUnityStringField(settingsPtr + 0x10);
+                    settingsName = ResolveUnityStringField(settingsPtr + 0x18);
+                    if (TryReadInt(settingsPtr + 0x20, out var exfilType))
+                        settingsType = exfilType.ToString(CultureInfo.InvariantCulture);
+                    if (TryReadBool(settingsPtr + 0x48, out var eventAvailableValue))
+                        eventAvailable = eventAvailableValue.ToString();
+                }
+
+                var posText = TryReadExfilWorldPosition(pointPtr, out var worldPos)
+                    ? $"({worldPos.X:F2},{worldPos.Y:F2},{worldPos.Z:F2})"
+                    : "?";
+
+                var details = new StringBuilder()
+                    .Append($"0x{pointPtr:X}")
+                    .Append($" {className}")
+                    .Append($" name=\"{exfilName}\"")
+                    .Append($" pointId=\"{pointId}\"")
+                    .Append($" settingsId=\"{settingsId}\"")
+                    .Append($" settingsName=\"{settingsName}\"")
+                    .Append($" settingsType={settingsType}")
+                    .Append($" eventAvailable={eventAvailable}")
+                    .Append($" pos={posText}")
+                    .Append($" status={statusName}({statusValue})")
+                    .Append($" reusable={reusable}");
+
+                if (secretPoints)
+                {
+                    var scav = TryReadBool(pointPtr + 0xF8, out var scavEligible) ? scavEligible.ToString() : "?";
+                    var pmc = TryReadBool(pointPtr + 0xF9, out var pmcEligible) ? pmcEligible.ToString() : "?";
+                    details.Append($" scav={scav} pmc={pmc}");
+                }
+
+                return details.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"0x{pointPtr:X} <read failed: {ex.Message}>";
+            }
+        }
+
+        private static string ResolveExfilPointName(ulong pointPtr)
+        {
+            // EFT.Interactive.ExfiltrationPoint
+            // 0x60 <Description>k__BackingField : string
+            // 0x98 Settings : object (EFT.Interactive.ExitTriggerSettings)
+            //      0x18 Name : string
+            // 0x48 _currentTip : string
+            if (TryReadUnityStringField(pointPtr + 0x60, out var description) && !string.IsNullOrWhiteSpace(description))
+                return description.Trim();
+
+            if (TryReadPtr(pointPtr + 0x98, out var settingsPtr) && settingsPtr != 0 &&
+                TryReadUnityStringField(settingsPtr + 0x18, out var settingsName) && !string.IsNullOrWhiteSpace(settingsName))
+                return settingsName.Trim();
+
+            if (TryReadUnityStringField(pointPtr + 0x48, out var tip) && !string.IsNullOrWhiteSpace(tip))
+                return tip.Trim();
+
+            return "unknown";
+        }
+
+        private static bool TryReadExfilWorldPosition(ulong pointPtr, out Vector3 pos)
+        {
+            try
+            {
+                var transformInternal = Memory.ReadPtrChain(pointPtr, false, UnityOffsets.TransformChain);
+                var transform = new UnityTransform(transformInternal, useCache: false);
+                pos = transform.UpdatePosition();
+                return true;
+            }
+            catch
+            {
+                pos = default;
+                return false;
+            }
+        }
+
+        private static string DescribeExfilStatus(byte statusValue)
+        {
+            return statusValue switch
+            {
+                0 => "NotPresent",
+                1 => "UncompleteRequirements",
+                2 => "Countdown",
+                3 => "RegularMode",
+                4 => "Pending",
+                5 => "AwaitsManualActivation",
+                6 => "Hidden",
+                _ => "Unknown"
+            };
+        }
+
+        private static void DumpObjectProbe(StringBuilder dump, ulong objectPtr, int probeCount)
+        {
+            for (int i = 0; i < probeCount; i++)
+            {
+                var offset = (uint)(i * sizeof(ulong));
+                if (TryReadUlong(objectPtr + offset, out var value))
+                {
+                    dump.AppendLine($"  +0x{offset:X2}: 0x{value:X}");
+                }
+                else
+                {
+                    dump.AppendLine($"  +0x{offset:X2}: <read failed>");
+                }
+            }
+        }
+
+        private static string SafeReadObjectType(ulong objectPtr)
+        {
+            try
+            {
+                return ObjectClass.ReadName(objectPtr, 128, false);
+            }
+            catch (Exception ex)
+            {
+                return $"<type read failed: {ex.Message}>";
+            }
+        }
+
+        private static bool TryReadUlong(ulong addr, out ulong value)
+        {
+            try
+            {
+                value = Memory.ReadValue<ulong>(addr, false);
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
+
+        private static bool TryReadPtr(ulong addr, out ulong value)
+        {
+            try
+            {
+                value = Memory.ReadPtr(addr, false);
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
+
+        private static bool TryReadInt(ulong addr, out int value)
+        {
+            try
+            {
+                value = Memory.ReadValue<int>(addr, false);
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
+
+        private static string ResolveUnityStringField(ulong fieldAddr)
+        {
+            return TryReadUnityStringField(fieldAddr, out var value) && !string.IsNullOrWhiteSpace(value)
+                ? value.Trim()
+                : "?";
+        }
+
+        private static bool TryReadUnityStringField(ulong fieldAddr, out string value)
+        {
+            try
+            {
+                var strPtr = Memory.ReadValue<ulong>(fieldAddr, false);
+                if (strPtr == 0)
+                {
+                    value = string.Empty;
+                    return false;
+                }
+
+                value = Memory.ReadUnityString(strPtr, 256, false);
+                return !string.IsNullOrWhiteSpace(value);
+            }
+            catch
+            {
+                value = string.Empty;
+                return false;
+            }
+        }
+
+        private static bool TryReadBool(ulong addr, out bool value)
+        {
+            try
+            {
+                value = Memory.ReadValue<bool>(addr, false);
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
+
+        private static bool TryReadValue<T>(ulong addr, out T value) where T : unmanaged
+        {
+            try
+            {
+                value = Memory.ReadValue<T>(addr, false);
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Start all Game Threads.
         /// </summary>
         public void Start()
@@ -201,6 +603,230 @@ namespace LoneEftDmaRadar.Tarkov.World
         #endregion
 
         #region Methods
+
+        /// <summary>
+        /// Attempts to find runtime exfiltration point data matching a configuration exfil.
+        /// Uses hybrid matching: settingsName (primary) + position distance (validation).
+        /// </summary>
+        /// <param name="configExfilName">Name from configuration (e.g., "Factory Gate", "Alpinist")</param>
+        /// <param name="configPosition">Position from static map config</param>
+        /// <param name="runtimeInfo">Output: matched runtime exfil info, or null if not found</param>
+        /// <returns>True if match found within distance threshold</returns>
+        public bool TryGetRuntimeExfilInfo(string configExfilName, Vector3 configPosition, out RuntimeExfilInfo runtimeInfo)
+        {
+            runtimeInfo = null;
+            if (_exfiltrationController == 0)
+                return false;
+
+            try
+            {
+                // Strategy 1: Try to match by settingsName (primary key)
+                var settingsNameMatch = TryFindExfilBySettingsName(configExfilName, configPosition);
+                if (settingsNameMatch != null)
+                {
+                    // Validate position distance
+                    float distance = Vector3.Distance(settingsNameMatch.RuntimePosition, configPosition);
+                    settingsNameMatch.PositionDistance = distance;
+
+                    if (distance < 10f)
+                    {
+                        runtimeInfo = settingsNameMatch;
+                        return true;
+                    }
+                    // Version mismatch warning: settingsName matched but position diverged significantly
+                    if (distance < 50f)
+                    {
+                        // Still accept but with caution (could be legitimate movement/change)
+                        runtimeInfo = settingsNameMatch;
+                        return true;
+                    }
+                    // Too far away - likely not the right point
+                }
+
+                // Strategy 2: Fallback - search by proximity (position distance < 15m)
+                var proximityMatch = TryFindExfilByProximity(configPosition);
+                if (proximityMatch != null && proximityMatch.PositionDistance < 15f)
+                {
+                    runtimeInfo = proximityMatch;
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logging.WriteLine($"[GameWorld] Error getting runtime exfil info: {ex}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to find exfil by matching settingsName from ExitTriggerSettings.
+        /// Searches all three collections: ExfiltrationPoints, ScavExfiltrationPoints, SecretExfiltrationPoints.
+        /// </summary>
+        private RuntimeExfilInfo TryFindExfilBySettingsName(string targetName, Vector3 referencePos)
+        {
+            if (string.IsNullOrWhiteSpace(targetName))
+                return null;
+
+            var targetNameUpper = targetName.ToUpperInvariant();
+
+            ulong exfilPoints = Memory.ReadPtr(_exfiltrationController + 0x20, false);
+            ulong scavExfilPoints = Memory.ReadPtr(_exfiltrationController + 0x28, false);
+            ulong secretExfilPoints = Memory.ReadPtr(_exfiltrationController + 0x30, false);
+
+            // Search regular exfil points
+            var result = SearchExfilCollection(exfilPoints, targetNameUpper, referencePos, false);
+            if (result != null)
+                return result;
+
+            // Search scav exfil points
+            result = SearchExfilCollection(scavExfilPoints, targetNameUpper, referencePos, false);
+            if (result != null)
+                return result;
+
+            // Search secret exfil points
+            result = SearchExfilCollection(secretExfilPoints, targetNameUpper, referencePos, true);
+            if (result != null)
+                return result;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Attempts to find the nearest exfil by position proximity.
+        /// Returns the closest match within acceptable range.
+        /// </summary>
+        private RuntimeExfilInfo TryFindExfilByProximity(Vector3 targetPos)
+        {
+            RuntimeExfilInfo closestMatch = null;
+            float closestDistance = float.MaxValue;
+
+            ulong exfilPoints = Memory.ReadPtr(_exfiltrationController + 0x20, false);
+            ulong scavExfilPoints = Memory.ReadPtr(_exfiltrationController + 0x28, false);
+            ulong secretExfilPoints = Memory.ReadPtr(_exfiltrationController + 0x30, false);
+
+            // Search all collections
+            UpdateClosestMatch(exfilPoints, targetPos, ref closestMatch, ref closestDistance, false);
+            UpdateClosestMatch(scavExfilPoints, targetPos, ref closestMatch, ref closestDistance, false);
+            UpdateClosestMatch(secretExfilPoints, targetPos, ref closestMatch, ref closestDistance, true);
+
+            return closestMatch;
+        }
+
+        /// <summary>
+        /// Helper: search a single exfil collection for a matching settingsName.
+        /// </summary>
+        private static RuntimeExfilInfo SearchExfilCollection(ulong collectionPtr, string targetNameUpper, Vector3 referencePos, bool secretPoints)
+        {
+            if (collectionPtr == 0)
+                return null;
+
+            try
+            {
+                using var array = UnityArray<ulong>.Create(collectionPtr, false);
+                foreach (var pointPtr in array)
+                {
+                    var info = ReadRuntimeExfilInfo(pointPtr, referencePos, secretPoints);
+                    if (info != null && info.SettingsName.ToUpperInvariant() == targetNameUpper)
+                    {
+                        return info;
+                    }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Helper: update closest match when searching by proximity.
+        /// </summary>
+        private static void UpdateClosestMatch(ulong collectionPtr, Vector3 targetPos, ref RuntimeExfilInfo closestMatch, ref float closestDistance, bool secretPoints)
+        {
+            if (collectionPtr == 0)
+                return;
+
+            try
+            {
+                using var array = UnityArray<ulong>.Create(collectionPtr, false);
+                foreach (var pointPtr in array)
+                {
+                    var info = ReadRuntimeExfilInfo(pointPtr, targetPos, secretPoints);
+                    if (info != null && info.PositionDistance < closestDistance)
+                    {
+                        closestMatch = info;
+                        closestDistance = info.PositionDistance;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Helper: read a single ExfiltrationPoint from memory into RuntimeExfilInfo.
+        /// </summary>
+        private static RuntimeExfilInfo ReadRuntimeExfilInfo(ulong pointPtr, Vector3 referencePos, bool secretPoints)
+        {
+            try
+            {
+                var info = new RuntimeExfilInfo
+                {
+                    Address = pointPtr
+                };
+
+                // Read status (0x58, byte)
+                if (TryReadValue<byte>(pointPtr + 0x58, out var status))
+                    info.Status = status;
+
+                // Read settings pointer (0x98)
+                if (TryReadPtr(pointPtr + 0x98, out var settingsPtr) && settingsPtr != 0)
+                {
+                    // Read settingsId (0x10) and settingsName (0x18) from ExitTriggerSettings
+                    info.SettingsId = ResolveUnityStringField(settingsPtr + 0x10);
+                    info.SettingsName = ResolveUnityStringField(settingsPtr + 0x18);
+
+                    // Read settingsType (0x20)
+                    if (TryReadValue<int>(settingsPtr + 0x20, out var type))
+                        info.SettingsType = type;
+
+                    // Read eventAvailable (0x48)
+                    if (TryReadBool(settingsPtr + 0x48, out var eventAvail))
+                        info.EventAvailable = eventAvail;
+                }
+                else
+                {
+                    info.SettingsName = "?";
+                    info.SettingsId = "?";
+                }
+
+                // Read reusable (0xC8, bool)
+                if (TryReadBool(pointPtr + 0xC8, out var reusable))
+                    info.Reusable = reusable;
+
+                // Read position from Transform
+                if (TryReadExfilWorldPosition(pointPtr, out var pos))
+                {
+                    info.RuntimePosition = pos;
+                    info.PositionDistance = Vector3.Distance(pos, referencePos);
+                }
+
+                // Read scav/pmc eligibility if secret points
+                if (secretPoints)
+                {
+                    if (TryReadBool(pointPtr + 0xF8, out var scavElig))
+                        info.ScavEligible = scavElig;
+                    if (TryReadBool(pointPtr + 0xF9, out var pmcElig))
+                        info.PmcEligible = pmcElig;
+                }
+
+                return info;
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
         /// <summary>
         /// Checks if a Raid has started.
