@@ -799,6 +799,41 @@ function getPlayerAimlineLength(player, localPlayer, settings) {
   return aimlineLength;
 }
 
+function getVerticalLevelCount(heightDiff) {
+  const absH = Math.abs(heightDiff);
+  if (absH <= 1.45) return 0;
+  if (absH <= 3.8) return 1;
+  if (absH <= 7.2) return 2;
+  return 3;
+}
+
+function drawVerticalStackIndicator(screenX, screenY, heightDiff, markerScale) {
+  const levelCount = getVerticalLevelCount(heightDiff);
+  if (levelCount <= 0) return;
+
+  const isUp = heightDiff > 0;
+  const symbol = isUp ? "\u25b2" : "\u25bc";
+  const fillColor = isUp ? "#32cd32" : "#ff4500";
+  const fontSize = Math.round(9 * markerScale);
+  const lineStep = Math.max(5, fontSize * 0.9);
+  const x = screenX - 11 * markerScale;
+  const firstY = screenY - ((levelCount - 1) * lineStep * 0.5);
+
+  ctx.save();
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i < levelCount; i++) {
+    const y = firstY + i * lineStep;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = Math.max(1, 2 * markerScale);
+    ctx.strokeText(symbol, x, y);
+    ctx.fillStyle = fillColor;
+    ctx.fillText(symbol, x, y);
+  }
+  ctx.restore();
+}
+
 function drawDeathMarker(screenX, screenY, markerScale, color) {
   const len = 6 * markerScale;
   ctx.save();
@@ -1216,6 +1251,9 @@ function drawFrame() {
       const yaw = player?.yaw ?? player?.Yaw ?? player?.rotation?.x ?? player?.rotation?.X ?? 0;
       const aimlineLength = getPlayerAimlineLength(player, local, aimlineSettings);
       drawPlayerPill(p.x, p.y, yaw, color, aimlineLength, markerScale);
+      if (!isLocalPlayer(player) && relative) {
+        drawVerticalStackIndicator(p.x, p.y, relative.height, markerScale);
+      }
       drawPlayerLabel(p.x, p.y, labelLines, color, markerScale);
     }
   }

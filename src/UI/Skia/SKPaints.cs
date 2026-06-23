@@ -151,7 +151,7 @@ namespace LoneEftDmaRadar.UI.Skia
 
         public static SKPaint PaintAIPMC { get; } = new()
         {
-            Color = SKColor.Parse("ff6600"),
+            Color = SKColor.Parse("ff3300"),
             StrokeWidth = 1.66f,
             Style = SKPaintStyle.Stroke,
             IsAntialias = true,
@@ -161,7 +161,7 @@ namespace LoneEftDmaRadar.UI.Skia
 
         public static SKPaint TextAIPMC { get; } = new()
         {
-            Color = SKColor.Parse("ff6600"),
+            Color = SKColor.Parse("ff3300"),
             IsStroke = false,
             IsAntialias = true,
         };
@@ -412,7 +412,7 @@ namespace LoneEftDmaRadar.UI.Skia
 
         public static SKPaint PaintExfil { get; } = new()
         {
-            Color = SKColors.Yellow,
+            Color = SKColors.LimeGreen,
             StrokeWidth = 0.25f,
             Style = SKPaintStyle.Fill,
             IsAntialias = true,
@@ -421,6 +421,50 @@ namespace LoneEftDmaRadar.UI.Skia
         public static SKPaint PaintExfilTransit { get; } = new()
         {
             Color = SKColors.Orange,
+            StrokeWidth = 0.25f,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = true,
+        };
+
+        /// <summary>
+        /// Exfil is currently available (status: Countdown or RegularMode).
+        /// </summary>
+        public static SKPaint PaintExfilAvailable { get; } = new()
+        {
+            Color = SKColors.LimeGreen,
+            StrokeWidth = 0.25f,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = true,
+        };
+
+        /// <summary>
+        /// Exfil requires manual activation (status: AwaitsManualActivation).
+        /// </summary>
+        public static SKPaint PaintExfilManualActivation { get; } = new()
+        {
+            Color = SKColors.Orange,
+            StrokeWidth = 0.25f,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = true,
+        };
+
+        /// <summary>
+        /// Exfil is pending and not yet available (status: Pending).
+        /// </summary>
+        public static SKPaint PaintExfilPending { get; } = new()
+        {
+            Color = SKColors.Red,
+            StrokeWidth = 0.25f,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = true,
+        };
+
+        /// <summary>
+        /// Exfil is not available (status: NotPresent, UncompleteRequirements, Hidden).
+        /// </summary>
+        public static SKPaint PaintExfilUnavailable { get; } = new()
+        {
+            Color = SKColors.Red,
             StrokeWidth = 0.25f,
             Style = SKPaintStyle.Fill,
             IsAntialias = true,
