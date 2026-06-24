@@ -1,5 +1,10 @@
 # Up To Date Lone's EFT DMA RADAR
 
+## Disclaimer
+
+This project is provided for educational and research purposes only.
+Use at your own risk.
+
 # Changelog
 
 ## v3.3.1
