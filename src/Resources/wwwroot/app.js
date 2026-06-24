@@ -229,15 +229,15 @@ function getMapLayers(map) {
   return [];
 }
 
-function getVisibleLayers(map, localWorldY) {
+function getVisibleLayers(map, referenceWorldY) {
   const layers = getMapLayers(map);
   if (!layers.length) return [];
 
   const visible = layers.filter((layer) => {
     const min = layer?.minHeight ?? layer?.MinHeight;
     const max = layer?.maxHeight ?? layer?.MaxHeight;
-    const minOk = (min == null) || localWorldY === null || (localWorldY >= Number(min));
-    const maxOk = (max == null) || localWorldY === null || (localWorldY <= Number(max));
+    const minOk = (min == null) || referenceWorldY === null || (referenceWorldY >= Number(min));
+    const maxOk = (max == null) || referenceWorldY === null || (referenceWorldY <= Number(max));
     return minOk && maxOk;
   });
 
@@ -426,7 +426,7 @@ function getPlayerColor(player) {
 
   if (player?.isBoss || player?.IsBoss) return "#ff00ff";
 
-  if (player?.isAIPmc || player?.IsAIPmc) return "#ff6600";
+  if (player?.isAIPmc || player?.IsAIPmc) return "#ff3300";
   if (player?.isRaider || player?.IsRaider) return "#ffc70f";
 
   const typeName = String(player?.typeName ?? player?.TypeName ?? "");
@@ -1128,6 +1128,8 @@ function drawFrame() {
   const local = players.find((p) => p?.isLocal || p?.IsLocal) || null;
   const localPos = local ? readPlayerMapXY(local) : null;
   const localWorldY = local ? readWorldY(local) : null;
+  const referencePlayerForView = selectedReferencePlayer || local;
+  const referenceWorldY = referencePlayerForView ? readWorldY(referencePlayerForView) : localWorldY;
   const markerScale = BASE_MARKER_SCALE * markerScaleMultiplier;
   const deathMarkerColor = getDeathMarkerColor(data);
   const corpseLabelColor = getCorpseLabelColor(data);
@@ -1142,7 +1144,7 @@ function drawFrame() {
     }
   }
 
-  const visibleLayers = getVisibleLayers(map, localWorldY);
+  const visibleLayers = getVisibleLayers(map, referenceWorldY);
   const primaryLayer = visibleLayers.length ? visibleLayers[visibleLayers.length - 1] : null;
   const filename = getLayerFilename(primaryLayer);
   const mapId = String(data?.mapId ?? data?.MapId ?? data?.mapID ?? data?.MapID ?? "unknown");
@@ -1194,7 +1196,7 @@ function drawFrame() {
 
     const p = toZoomedPos(pos.x, pos.y, params);
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
-    drawExitMarker({ x: p.x, y: p.y, h: pos.h }, localWorldY, "#ffff00", markerScale);
+    drawExitMarker({ x: p.x, y: p.y, h: pos.h }, referenceWorldY, "#ffff00", markerScale);
   }
 
   for (const transit of transits) {
@@ -1203,7 +1205,7 @@ function drawFrame() {
 
     const p = toZoomedPos(pos.x, pos.y, params);
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
-    drawExitMarker({ x: p.x, y: p.y, h: pos.h }, localWorldY, "#ffa500", markerScale);
+    drawExitMarker({ x: p.x, y: p.y, h: pos.h }, referenceWorldY, "#ffa500", markerScale);
   }
 
   for (const loot of lootItems) {
@@ -1214,7 +1216,7 @@ function drawFrame() {
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
 
     const color = getLootColor(loot);
-    drawLootMarker({ x: p.x, y: p.y, h: pos.h }, localWorldY, color, markerScale);
+    drawLootMarker({ x: p.x, y: p.y, h: pos.h }, referenceWorldY, color, markerScale);
 
     if (showLootLabels) {
       const label = formatLootLabel(loot);
