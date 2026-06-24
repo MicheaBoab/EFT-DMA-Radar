@@ -2,6 +2,10 @@
 
 # Changelog
 
+## v3.3.1
+- **Web Layer Reference**: Web Radar map layer visibility now follows the selected reference player height (falls back to local player when no reference is selected).
+- **AIPMC Classification Tightening**: Raider-family units are marked/colored as AIPMC only when role naming is explicitly USEC/BEAR-like, reducing false AIPMC coloring.
+
 ## v3.3
 - **Dynamic Exfil Status**: Real-time extraction point status read directly from game memory
   - Color-coded exfil points: Green (available), Orange (needs activation), Red (pending/unavailable)
