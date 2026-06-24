@@ -156,7 +156,11 @@ namespace LoneEftDmaRadar.Web.WebRadar.Data
                 IsRaider = player.Type == PlayerType.AIRaider,
                 IsAIPmc = player is ObservedPlayer obs
                     && player.Type == PlayerType.AIRaider
-                    && !string.IsNullOrEmpty(obs.UsecBearAiFactionName),
+                    && !string.IsNullOrEmpty(obs.UsecBearAiFactionName)
+                    && (string.Equals(player.Name, "AIPMC", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(player.Name, "Usec", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(player.Name, "Bear", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(player.Name, obs.UsecBearAiFactionName, StringComparison.OrdinalIgnoreCase)),
                 ColorHex = GetPlayerColorHex(player)
             };
         }
@@ -173,9 +177,14 @@ namespace LoneEftDmaRadar.Web.WebRadar.Data
                 PlayerType.Teammate => ToCssHex(SKPaints.PaintTeammate.Color),
                 PlayerType.PMC => ToCssHex(SKPaints.PaintPMC.Color),
                 PlayerType.AIScav => ToCssHex(SKPaints.PaintScav.Color),
-                PlayerType.AIRaider => player is ObservedPlayer obs && !string.IsNullOrEmpty(obs.UsecBearAiFactionName)
-                    ? ToCssHex(SKPaints.PaintAIPMC.Color)
-                    : ToCssHex(SKPaints.PaintRaider.Color),
+                PlayerType.AIRaider => player is ObservedPlayer obs
+                    && !string.IsNullOrEmpty(obs.UsecBearAiFactionName)
+                    && (string.Equals(player.Name, "AIPMC", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(player.Name, "Usec", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(player.Name, "Bear", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(player.Name, obs.UsecBearAiFactionName, StringComparison.OrdinalIgnoreCase))
+                        ? ToCssHex(SKPaints.PaintAIPMC.Color)
+                        : ToCssHex(SKPaints.PaintRaider.Color),
                 PlayerType.AIBoss => ToCssHex(SKPaints.PaintBoss.Color),
                 PlayerType.PScav => ToCssHex(SKPaints.PaintPScav.Color),
                 _ => ToCssHex(SKPaints.PaintPMC.Color)
