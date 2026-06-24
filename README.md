@@ -1,7 +1,5 @@
 # Up To Date Lone's EFT DMA RADAR
 
-Trying to keep the project working with new updates, can't promise i update it immediately after updates since i have real life responsabilities  
-
 # Changelog
 
 ## v3.3
@@ -18,10 +16,3 @@ Trying to keep the project working with new updates, can't promise i update it i
 - Add wishlist toggle and render filtered loot with colors on web radar
 - Sanitize web radar payload values and sync map ID aliases
 - AIPMC classification with visual color differentiation
-
-# How To Run
- 1.Download visual studio https://visualstudio.microsoft.com/downloads/  
- 2.Download ZIP file from git  
- 3.Unzip it  
- 4.Open .csproj file in visual studio  
- 5.Build & run it  
