@@ -23,6 +23,9 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
     /// </summary>
     public abstract class AbstractPlayer : IWorldEntity, IMapEntity, IMouseoverEntity
     {
+        // Avoid transient de-registration flicker (especially after mid-raid restart).
+        private const int InactiveMissThreshold = 5;
+
         /// <summary>
         /// Group ID for Solo Players.
         /// </summary>
@@ -152,6 +155,7 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         /// True if the Player is Active (in the player list).
         /// </summary>
         public bool IsActive { get; private set; }
+        private int _inactiveMissCount;
 
         /// <summary>
         /// Player's Group Id (Default: Solo).
@@ -376,6 +380,11 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
             }
             else if (IsAlive) // Not in list, but alive
             {
+                // Debounce transient misses in the registered list.
+                _inactiveMissCount++;
+                if (_inactiveMissCount < InactiveMissThreshold)
+                    return;
+
                 scatter.PrepareReadPtr(CorpseAddr);
                 scatter.Completed += (sender, x1) =>
                 {
@@ -395,6 +404,7 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         {
             Corpse = corpse;
             IsActive = false;
+            _inactiveMissCount = 0;
         }
 
         /// <summary>
@@ -404,6 +414,7 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
         {
             Corpse = null;
             IsActive = false;
+            _inactiveMissCount = 0;
         }
 
         /// <summary>
@@ -414,6 +425,7 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
             Corpse = null;
             LootObject = null;
             IsActive = true;
+            _inactiveMissCount = 0;
         }
 
         /// <summary>
