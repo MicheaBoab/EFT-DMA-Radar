@@ -687,8 +687,14 @@ namespace LoneEftDmaRadar.Tarkov.World.Player
                 case PlayerType.AIScav:
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintScav, SKPaints.TextScav);
                 case PlayerType.AIRaider:
-                    // AIPMC (Usec/Bear) uses deep orange, Raider/Rogue/Guard uses original orange-yellow
-                    if (this is ObservedPlayer obs && !string.IsNullOrEmpty(obs.UsecBearAiFactionName))
+                    // Only use AIPMC color when the current display role is explicitly USEC/BEAR-like.
+                    // Voice hints alone can exist while role is still Raider/Rogue.
+                    if (this is ObservedPlayer obs
+                        && !string.IsNullOrEmpty(obs.UsecBearAiFactionName)
+                        && (string.Equals(Name, "AIPMC", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(Name, "Usec", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(Name, "Bear", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(Name, obs.UsecBearAiFactionName, StringComparison.OrdinalIgnoreCase)))
                         return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintAIPMC, SKPaints.TextAIPMC);
                     else
                         return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintRaider, SKPaints.TextRaider);
